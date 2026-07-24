@@ -1,0 +1,327 @@
+# بيانات تدريب مصنّف النية — عربي فصيح/عامي سوري + إنكليزي + مختلط.
+# الصيغة: النص ||| النية   (سطر فارغ أو يبدأ بـ# يُتجاهل)
+# 9 نوايا مغلقة فقط (CLAUDE.md). REFERENCE_TAG = __مكان_مشار_اليه__
+
+# ---------------------------------------------------------------------- search
+اقترحلي مطاعم بحلب ||| search
+بدي اماكن طبيعه هاديه ||| search
+شو في اماكن حلوه بالاذقيه ||| search
+دلوني على اماكن سياحيه بدمشق ||| search
+وين احلى اماكن تاريخيه بالبلد ||| search
+بدي روح ع مكان حلو بس ما بعرف وين ||| search
+بدي سافر بس ما بعرف لوين ||| search
+بدي سافر ما بعرف على وين بالضبط ||| search
+i want to travel but i don't know where ||| search
+عندك اقتراحات لاماكن بحريه بطرطوس ||| search
+شو انصحني زور بحمص ||| search
+بدي اماكن للعيله بحلب ||| search
+وريني اماكن رومانسيه بدمشق ||| search
+شو في اسواق حلوه بحلب ||| search
+اقترح علي متاحف بدمشق ||| search
+بدي اماكن مغامرات بريف دمشق ||| search
+فيه شواطئ حلوه باللاذقيه ||| search
+شو احلى مطاعم بحلب القديمه ||| search
+عايز اماكن هادية للاستجمام ||| search
+بدي زياره اماكن دينيه بدمشق ||| search
+شو الاماكن يلي لازم زورها بتدمر ||| search
+اقترحلي رحله ليوم واحد قريبه من دمشق ||| search
+بدي اماكن اكل شامي اصيل ||| search
+وين احلى مكان اطلع فيه مع صحابي ||| search
+شو عندكن اماكن للاطفال بدمشق ||| search
+دلني على مكان هادي بعيد عن الزحمه ||| search
+بدي اماكن طبيعيه بريف اللاذقيه ||| search
+شو في قلاع تاريخيه بحمص ||| search
+وين بقدر اطلع مع خطيبتي بدمشق ||| search
+اقترحلي اماكن تاريخيه بدمشق ||| search
+شو في اماكن حلوه قريبه من طرطوس ||| search
+بدي مكان اقتصادي احلى فيه ||| search
+دلوني على مكان فخم لعشاء رومانسي ||| search
+suggest historical places in damascus ||| search
+what are good places to visit in aleppo ||| search
+recommend quiet nature spots near latakia ||| search
+any good restaurants in old damascus ||| search
+show me family friendly places in tartus ||| search
+i want to explore markets in aleppo ||| search
+suggest romantic places for couples in damascus ||| search
+where can i see ancient ruins near homs ||| search
+what should i visit in palmyra ||| search
+give me some ideas for a day trip ||| search
+بدي مكان لل family قريب من latakia ||| search
+suggest اماكن تاريخيه بدمشق ||| search
+وين احسن sea spots بطرطوس ||| search
+any museums حلوه بدمشق ||| search
+recommend مطاعم شاميه اصيله ||| search
+
+# --------------------------------------------------------------------- details
+شو قصة __مكان_مشار_اليه__ ||| details
+حدثني عنه أكتر ||| details
+شو اوقات دوامه ||| details
+tell me more about the first one ||| details
+شو قصة التاني ||| details
+what are its opening hours ||| details
+هل هو مفتوح اليوم ||| details
+شو سعر الدخول لـ __مكان_مشار_اليه__ ||| details
+وين موقع __مكان_مشار_اليه__ بالضبط ||| details
+شو رقم هاتف __مكان_مشار_اليه__ ||| details
+كم بتاخد زيارته وقت ||| details
+is it open on friday ||| details
+what time does it close ||| details
+شو مميزات __مكان_مشار_اليه__ ||| details
+احكيلي اكتر عن هالمكان ||| details
+مفتوح يوم الاثنين ولا لا ||| details
+شو افضل وقت لزيارة __مكان_مشار_اليه__ ||| details
+tell me about __مكان_مشار_اليه__ ||| details
+عطيني تفاصيل اكتر عنه ||| details
+شو بيميز التالت عن غيره ||| details
+هل يحتاج حجز مسبق ||| details
+what's the phone number for it ||| details
+شو موقعه بالخارطه ||| details
+كم ساعة بتلزم لزيارة القلعة ||| details
+is the umayyad mosque open now ||| details
+شو قصة قلعة الحصن ||| details
+احكيلي عن سوق الحميدية ||| details
+what's special about palmyra ||| details
+هل مناسب لزيارة العائلة هالمكان ||| details
+عندك صور اكتر عن المكان ||| details
+شو رأي الناس فيه ||| details
+رح كم نجمة تقييمه ||| details
+شو الموسم الافضل لزيارته ||| details
+can you tell me its visiting hours ||| details
+شو احسن وقت باليوم لزيارة __مكان_مشار_اليه__ ||| details
+is palmyra worth visiting ||| details
+is it worth visiting ||| details
+is __مكان_مشار_اليه__ worth visiting ||| details
+
+# --------------------------------------------------------------------- compare
+ايهن احسن الاول ولا التالت ||| compare
+which is better for families ||| compare
+شو الفرق بين قلعة الحصن وقلعة صلاح الدين ||| compare
+ايهم افضل للاطفال ||| compare
+compare the first and second one ||| compare
+شو الانسب لينا القلعة ولا الجامع ||| compare
+ايهن اقرب المتحف ولا السوق ||| compare
+which one is cheaper ||| compare
+شو احسن للزوجين الاول ولا الثاني ||| compare
+compare palmyra and krak des chevaliers ||| compare
+ايهن اليوم الافضل تقييما ||| compare
+شو الفرق بالسعر بينهن ||| compare
+which is more suitable for a large group ||| compare
+قارنلي بين المكانين ||| compare
+ايهم اقرب الي ||| compare
+what's better rated the first or the last ||| compare
+شو رايك الاول احسن ولا التاني ||| compare
+between the citadel and the mosque which is better ||| compare
+ايهن بياخد وقت اقل ||| compare
+شو الافضل من ناحية الموقع ||| compare
+compare these two places for me ||| compare
+ايهن انسب للاصحاب ||| compare
+شو الفرق من ناحية الهدوء ||| compare
+which has better reviews ||| compare
+قارن لي القلعة والمتحف ||| compare
+ايهم احسن مكان للصور ||| compare
+what's the difference between them ||| compare
+شو احسن خيار من ناحية السعر ||| compare
+ايهن اقرب لمركز المدينة ||| compare
+which one should i pick ||| compare
+
+# ------------------------------------------------------------------- build_plan
+اعملي خطه 3 ايام بدمشق ||| build_plan
+رتبلي المحفوظات بخطه يومين ||| build_plan
+plan me a trip ||| build_plan
+plan me 3 days in damascus with my wife ||| build_plan
+بدي خطة رحلة لخمس ايام ||| build_plan
+رتب لي جدول زيارة لحلب ||| build_plan
+اعمل لي برنامج سياحي ليوم واحد ||| build_plan
+can you build a 4 day itinerary ||| build_plan
+بدي خطة لعيلتي بثلاث ايام باللاذقيه ||| build_plan
+رتبلي رحله لاصحابي بيومين ||| build_plan
+اريد برنامج متكامل للرحله ||| build_plan
+plan a trip for two days in aleppo ||| build_plan
+حضرلي جدول زيارات لتدمر ويوم كامل ||| build_plan
+بدي جدول يومي مفصل للرحله ||| build_plan
+رتب رحله رومانسية لثلاث ايام ||| build_plan
+build me an itinerary for a family trip ||| build_plan
+اعمل خطة سفر لاسبوع بسوريا ||| build_plan
+بدي رحله منظمة بميزانيه محدودة ||| build_plan
+حضرلي برنامج زيارة شامل لدمشق ||| build_plan
+plan our honeymoon trip for 4 days ||| build_plan
+رتبلي ياهن بخطة يومين ||| build_plan
+اعمل لي جدول زمني للرحلة ||| build_plan
+schedule my trip for next week ||| build_plan
+بدي رحلة جماعية منظمة لثلاث ايام ||| build_plan
+حضرلي خطة ليومين براحه ||| build_plan
+can you organize a plan for us ||| build_plan
+رتب زيارتنا حسب الوقت ||| build_plan
+بدي برنامج يومي لكل يوم بالرحلة ||| build_plan
+اعمل خطة سياحية شاملة ||| build_plan
+plan my week in syria ||| build_plan
+بدي رحله لخمس ايام مع اصحابي ||| build_plan
+رتب لنا زيارة شامل لحمص وحماة ||| build_plan
+اعمل خطة رحلة عيد الاضحى ||| build_plan
+build a two day plan around palmyra ||| build_plan
+حضرلي جدول رحلة العائلة الصيفية ||| build_plan
+
+# ------------------------------------------------------------------ modify_plan
+شيل المتحف من الخطه ||| modify_plan
+بدل التاني بشي للاطفال ||| modify_plan
+خلي الغدا ابكر ||| modify_plan
+move the castle to day 2 ||| modify_plan
+remove the museum ||| modify_plan
+شيل __مكان_مشار_اليه__ من اليوم التاني ||| modify_plan
+بدل __مكان_مشار_اليه__ بمكان تاني ||| modify_plan
+احذف __مكان_مشار_اليه__ من الخطة ||| modify_plan
+غير مكان الزيارة التالت ||| modify_plan
+اخر الغدا شوي ||| modify_plan
+قدم موعد الزياره الاولى ||| modify_plan
+انقل السوق ليوم تاني ||| modify_plan
+change the pace of day one ||| modify_plan
+shift the lunch earlier ||| modify_plan
+بدي غير ترتيب اليوم الاول ||| modify_plan
+زود يوم عالخطة ||| modify_plan
+قصر الخطة يوم ||| modify_plan
+extend the trip by one more day ||| modify_plan
+shrink the plan to two days ||| modify_plan
+بدلي مكان الزيارة الاخيرة ||| modify_plan
+خلي يوم القلعة اخف شوي ||| modify_plan
+add a museum to day two ||| modify_plan
+حط زيارة تانيه بيوم واحد ||| modify_plan
+عدل مواعيد اليوم الثاني ||| modify_plan
+غيرلي المطعم يلي بالخطة ||| modify_plan
+move __مكان_مشار_اليه__ to day three ||| modify_plan
+بدي اشيل السوق منها ||| modify_plan
+خفف من زحمة اليوم الاول ||| modify_plan
+زيد مكان جديد لليوم التالت ||| modify_plan
+اقلب ترتيب الزيارات ||| modify_plan
+اخر موعد الغدا نص ساعة ||| modify_plan
+change day two to a relaxed pace ||| modify_plan
+remove __مكان_مشار_اليه__ from the plan ||| modify_plan
+بدي عدل بالخطة شوي ||| modify_plan
+can you adjust the plan timing ||| modify_plan
+
+# ------------------------------------------------------------------ add_to_plan
+ضيفو عالخطه ||| add_to_plan
+add it to my plan ||| add_to_plan
+احفظلي هاد ||| add_to_plan
+ضيف __مكان_مشار_اليه__ عالخطة ||| add_to_plan
+save this place ||| add_to_plan
+حط __مكان_مشار_اليه__ بالمحفوظات ||| add_to_plan
+بدي احفظ هالمكان ||| add_to_plan
+add this to my saved places ||| add_to_plan
+خليه ضمن خطتي ||| add_to_plan
+ضيف التاني للخطة ||| add_to_plan
+save it for later ||| add_to_plan
+بدي ضيف هالمكان لخطتي ||| add_to_plan
+add the first one to my plan ||| add_to_plan
+حطه بقائمتي ||| add_to_plan
+احفظلي __مكان_مشار_اليه__ ||| add_to_plan
+keep this one ||| add_to_plan
+ضيف هاد المكان ||| add_to_plan
+save the second one ||| add_to_plan
+بدي احتفظ فيه ||| add_to_plan
+add krak des chevaliers to my plan ||| add_to_plan
+حلو ضيفو ||| add_to_plan
+yes add it please ||| add_to_plan
+خليه بالخطة ||| add_to_plan
+بدي حط المتحف بالخطة ||| add_to_plan
+add __مكان_مشار_اليه__ please ||| add_to_plan
+احفظ لي هاي الاماكن ||| add_to_plan
+ضيف كل الي عجبوني ||| add_to_plan
+save all of these ||| add_to_plan
+حطهن بالمحفوظات ||| add_to_plan
+بدي هاد يصير جزء من رحلتي ||| add_to_plan
+
+# ----------------------------------------------------------------------- reject
+ما عجبوني ||| reject
+لا مو هدول ||| reject
+i don't like these ||| reject
+none of these work for me ||| reject
+ما حبيت الاقتراحات ||| reject
+مش هيك بدي ||| reject
+these don't fit what i want ||| reject
+ما اعجبني ولا واحد فيهن ||| reject
+بلا هدول ||| reject
+مش عاجبني الخيارات ||| reject
+can you suggest something else instead ||| reject
+مش هاد يلي بدي ياه ||| reject
+لا هدول مو مناسبين ||| reject
+i want different options please ||| reject
+مش مقتنع بالاقتراحات ||| reject
+ما ناسبتني هالاماكن ||| reject
+رفضتهن كلهن ||| reject
+none of them at all ||| reject
+مش هيك كان قصدي ||| reject
+غيرلي الاقتراحات كلها ||| reject
+لا شكرا ما بحبن ||| reject
+i'm not interested in these options ||| reject
+مش هاي الاماكن يلي بفكر فيها ||| reject
+هدول ما يفيدوني ||| reject
+show me something totally different please ||| reject
+لا بدي شي تاني تمامًا ||| reject
+ما عجبني ولا مكان منهم ||| reject
+these places aren't right for me ||| reject
+مش قريبين من ذوقي ||| reject
+i reject all of these suggestions ||| reject
+
+# ---------------------------------------------------------------- greeting_thanks
+مرحبا ||| greeting_thanks
+يسلمو كتير ||| greeting_thanks
+hello ||| greeting_thanks
+thank you ||| greeting_thanks
+thanks a lot ||| greeting_thanks
+مساء الخير ||| greeting_thanks
+صباح الخير ||| greeting_thanks
+شكرا الك ||| greeting_thanks
+hi there ||| greeting_thanks
+تسلم ايدك ||| greeting_thanks
+يعطيك العافيه ||| greeting_thanks
+thanks so much ||| greeting_thanks
+هاي كيفك ||| greeting_thanks
+اهلا ||| greeting_thanks
+مرحبتين ||| greeting_thanks
+شكرا كتير ع المساعدة ||| greeting_thanks
+thank you very much ||| greeting_thanks
+hey how are you ||| greeting_thanks
+تمام شكرا الك ||| greeting_thanks
+يسلمو ع الاقتراحات ||| greeting_thanks
+good morning ||| greeting_thanks
+good evening ||| greeting_thanks
+حلو منك شكرا ||| greeting_thanks
+thanks for the help ||| greeting_thanks
+اهلين وسهلين ||| greeting_thanks
+هاي ||| greeting_thanks
+appreciate it ||| greeting_thanks
+شكرا الك كتير ع وقتك ||| greeting_thanks
+مرحبا كيفك اليوم ||| greeting_thanks
+thanks bro ||| greeting_thanks
+
+# ---------------------------------------------------------------- out_of_scope
+احجزلي طيران لتركيا ||| out_of_scope
+book me a flight to turkey ||| out_of_scope
+بدي تاشيرة سفر لالمانيا ||| out_of_scope
+can you order me some food ||| out_of_scope
+بدي احجز فندق بدبي ||| out_of_scope
+what's the weather like tomorrow ||| out_of_scope
+بدي اشتري تذكرة طيران ||| out_of_scope
+can you help me with my homework ||| out_of_scope
+بدي احول فلوس ||| out_of_scope
+translate this sentence to french ||| out_of_scope
+بدي اعرف سعر الدولار اليوم ||| out_of_scope
+what's the capital of france ||| out_of_scope
+احجزلي تاكسي عالمطار ||| out_of_scope
+can you write me a poem ||| out_of_scope
+بدي رقم شركة طيران ||| out_of_scope
+how do i renew my passport ||| out_of_scope
+بدي احجز رحلة لبيروت ||| out_of_scope
+what's 2 plus 2 ||| out_of_scope
+can you book a hotel in paris ||| out_of_scope
+بدي اعرف اخبار اليوم ||| out_of_scope
+help me fix my computer please ||| out_of_scope
+بدي استئجر سيارة بدبي ||| out_of_scope
+what time is it in tokyo ||| out_of_scope
+can you recommend a good doctor ||| out_of_scope
+بدي اشتري بطاقة سياحية لاوروبا ||| out_of_scope
+tell me a joke ||| out_of_scope
+بدي احجز تذكرة قطار ||| out_of_scope
+what's the exchange rate today ||| out_of_scope
+can you help me learn python ||| out_of_scope
+بدي اطلب فيزا شنغن ||| out_of_scope

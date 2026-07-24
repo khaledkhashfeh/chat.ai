@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مختبر الفهم المنظم — /context — منصة السياحة الذكية في سوريا</title>
+<style>
+  :root{
+    --bg:#0b1615;
+    --panel:#0f1f1d;
+    --panel-2:#132c29;
+    --border:#1e3a36;
+    --ink:#eaf3f1;
+    --ink-dim:#9fb8b3;
+    --muted:#6f8f89;
+    --teal:#14b8a6;
+    --teal-dim:#0d8f81;
+    --gold:#d3a24b;
+    --gold-dim:#b8853a;
+    --violet:#8b7cf6;
+    --orange:#e08a4b;
+    --danger:#e5484d;
+    --amber:#e0a83b;
+    --ok:#3ecf8e;
+    --bubble-user:#14453f;
+    --bubble-bot:#16211f;
+    --radius:14px;
+    --shadow:0 8px 24px rgba(0,0,0,.35);
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 100% -10%, rgba(20,184,166,.10), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(139,124,246,.08), transparent 60%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Segoe UI","Tahoma","Cairo",system-ui,-apple-system,sans-serif;
+    display:flex;
+    height:100vh;
+    overflow:hidden;
+  }
+
+  #app{display:grid; grid-template-columns:340px 1fr; width:100%; height:100%;}
+  @media (max-width:880px){
+    #app{grid-template-columns:1fr;}
+    #sidebar{position:fixed; inset:0 20% 0 0; z-index:40; transform:translateX(105%); transition:transform .25s ease;}
+    #sidebar.open{transform:translateX(0);}
+    #sidebarBackdrop{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:35;}
+    #sidebarBackdrop.show{display:block;}
+    #menuBtn{display:inline-flex !important;}
+  }
+
+  /* ---------- الشريط الجانبي ---------- */
+  #sidebar{background:linear-gradient(180deg, var(--panel), #0b1a18); border-left:1px solid var(--border); display:flex; flex-direction:column; overflow-y:auto;}
+  .brand{display:flex; align-items:center; gap:10px; padding:18px 16px 14px; border-bottom:1px solid var(--border);}
+  .brand .logo{width:38px; height:38px; border-radius:10px; background:linear-gradient(135deg, var(--teal), var(--violet)); display:flex; align-items:center; justify-content:center; font-size:19px; box-shadow:var(--shadow); flex:none;}
+  .brand h1{font-size:14.5px; margin:0; line-height:1.35; font-weight:700;}
+  .brand p{margin:2px 0 0; font-size:11.5px; color:var(--ink-dim);}
+
+  .section{padding:14px 16px; border-bottom:1px solid var(--border);}
+  .section-title{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:700; margin:0 0 10px; display:flex; align-items:center; gap:6px;}
+
+  .field{margin-bottom:10px;}
+  .field label{display:block; font-size:11.5px; color:var(--ink-dim); margin-bottom:5px;}
+  .field .row{display:flex; gap:6px;}
+  input[type=text], input[type=password], select{
+    width:100%; background:var(--panel-2); border:1px solid var(--border); color:var(--ink);
+    border-radius:9px; padding:8px 10px; font-size:12.5px; outline:none;
+    transition:border-color .15s, box-shadow .15s; font-family:inherit; direction:ltr; text-align:left;
+  }
+  select{direction:rtl; text-align:right; cursor:pointer;}
+  input:focus, select:focus{border-color:var(--teal); box-shadow:0 0 0 3px rgba(20,184,166,.15);}
+  .iconbtn{flex:none; width:34px; height:34px; border-radius:9px; border:1px solid var(--border); background:var(--panel-2); color:var(--ink-dim); cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; transition:.15s;}
+  .iconbtn:hover{color:var(--teal); border-color:var(--teal-dim); background:#0f2622;}
+
+  .status-row{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--ink-dim);}
+  .dot{width:8px; height:8px; border-radius:50%; background:var(--muted); flex:none; transition:background .2s;}
+  .dot.ok{background:var(--ok); box-shadow:0 0 8px var(--ok);}
+  .dot.bad{background:var(--danger); box-shadow:0 0 8px var(--danger);}
+
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid var(--border); background:var(--panel-2); color:var(--ink); border-radius:9px; padding:8px 12px; font-size:12.5px; cursor:pointer; transition:.15s; font-family:inherit; font-weight:600;}
+  .btn:hover{border-color:var(--teal-dim); background:#0f2622;}
+  .btn.full{width:100%;}
+  .btn.danger{color:#ffd7d8; border-color:#5c2326;}
+  .btn.danger:hover{background:#2a1315;}
+
+  .scenarios{display:flex; flex-direction:column; gap:6px;}
+  .scenario-btn{text-align:right; background:var(--panel-2); border:1px solid var(--border); color:var(--ink); border-radius:10px; padding:9px 11px; font-size:12.5px; cursor:pointer; transition:.15s; font-family:inherit; line-height:1.5; display:flex; align-items:flex-start; gap:8px;}
+  .scenario-btn:hover{border-color:var(--violet); background:#171526;}
+  .scenario-btn .tag{flex:none; font-size:9.5px; padding:2px 6px; border-radius:6px; background:rgba(139,124,246,.15); color:var(--violet); font-weight:700; border:1px solid rgba(139,124,246,.3); white-space:nowrap;}
+  .scenario-btn .txt{color:var(--ink-dim); flex:1;}
+  .scenario-btn .txt b{color:var(--ink); font-weight:600;}
+
+  .toggle-row{display:flex; align-items:center; justify-content:space-between; font-size:12.5px; color:var(--ink-dim);}
+  .switch{position:relative; width:36px; height:20px; flex:none;}
+  .switch input{opacity:0; width:0; height:0;}
+  .slider{position:absolute; inset:0; background:var(--panel-2); border:1px solid var(--border); border-radius:20px; cursor:pointer; transition:.2s;}
+  .slider:before{content:""; position:absolute; width:14px; height:14px; left:3px; top:2px; background:var(--muted); border-radius:50%; transition:.2s;}
+  input:checked + .slider{background:rgba(20,184,166,.25); border-color:var(--teal-dim);}
+  input:checked + .slider:before{transform:translateX(-16px); background:var(--teal);}
+
+  .footer-note{padding:12px 16px; font-size:10.5px; color:var(--muted); line-height:1.6;}
+
+  /* ---------- المنطقة الرئيسية ---------- */
+  #main{display:flex; flex-direction:column; height:100%; min-width:0;}
+  #topbar{display:flex; align-items:center; gap:12px; padding:12px 20px; border-bottom:1px solid var(--border); background:rgba(15,31,29,.6); backdrop-filter:blur(6px);}
+  #menuBtn{display:none;}
+  #topbar .title{font-size:13.5px; font-weight:700; flex:1;}
+  #topbar .title small{display:block; font-size:11px; color:var(--muted); font-weight:400; direction:ltr; text-align:right;}
+  .pill{font-size:11px; padding:4px 10px; border-radius:999px; border:1px solid var(--border); color:var(--ink-dim); background:var(--panel-2); display:inline-flex; align-items:center; gap:5px;}
+
+  #messages{flex:1; overflow-y:auto; padding:22px 22px 8px; display:flex; flex-direction:column; gap:16px;}
+  .empty-state{margin:auto; text-align:center; color:var(--muted); max-width:400px; padding:30px;}
+  .empty-state .big{font-size:34px; margin-bottom:10px;}
+  .empty-state h2{color:var(--ink-dim); font-size:15px; margin:0 0 6px;}
+  .empty-state p{font-size:12.5px; line-height:1.7; margin:0;}
+
+  .turn{display:flex; flex-direction:column; gap:10px; animation:pop .18s ease; max-width:760px; width:100%;}
+  @keyframes pop{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
+  .in-msg{align-self:flex-start; display:flex; gap:10px; max-width:88%;}
+  .in-msg .avatar{flex:none; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; background:linear-gradient(135deg,#2a5a52,#173a34); border:1px solid var(--border);}
+  .in-msg .bubble{background:var(--bubble-user); border:1px solid #1c4a42; border-top-right-radius:4px; padding:10px 14px; border-radius:16px; font-size:13.5px; line-height:1.7;}
+  .in-msg .bubble[dir=ltr]{text-align:left;}
+
+  /* ---------- لوحة الفهم المنظم ---------- */
+  .ctx-panel{background:var(--bubble-bot); border:1px solid var(--border); border-radius:14px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.25);}
+  .ctx-panel.error{background:#2a1315; border-color:#5c2326;}
+  .ctx-error-text{padding:12px 16px; color:#ffd7d8; font-size:13px;}
+
+  .ctx-head{display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border); background:var(--panel-2); flex-wrap:wrap;}
+  .intent-badge{font-size:12px; font-weight:800; padding:5px 12px; border-radius:999px; display:inline-flex; align-items:center; gap:6px; border:1px solid;}
+  .intent-badge .en{font-size:10px; opacity:.7; direction:ltr; font-weight:600;}
+  .ib-recommend{color:var(--teal); border-color:rgba(20,184,166,.4); background:rgba(20,184,166,.1);}
+  .ib-search{color:#5fd6c6; border-color:rgba(95,214,198,.4); background:rgba(95,214,198,.08);}
+  .ib-details{color:var(--gold); border-color:rgba(211,162,75,.4); background:rgba(211,162,75,.1);}
+  .ib-create{color:var(--violet); border-color:rgba(139,124,246,.4); background:rgba(139,124,246,.1);}
+  .ib-modify{color:var(--orange); border-color:rgba(224,138,75,.4); background:rgba(224,138,75,.1);}
+  .ib-general{color:var(--muted); border-color:var(--border); background:var(--panel);}
+
+  .conf-wrap{display:flex; align-items:center; gap:8px; margin-right:auto; font-size:11px; color:var(--ink-dim);}
+  .conf-track{width:96px; height:7px; border-radius:99px; background:var(--panel); border:1px solid var(--border); overflow:hidden; position:relative;}
+  .conf-fill{position:absolute; top:0; right:0; height:100%; border-radius:99px; transition:width .4s;}
+  .conf-val{font-family:"Cascadia Code","Consolas",monospace; direction:ltr; font-size:11px;}
+  .lang-tag{font-size:10.5px; padding:2px 8px; border-radius:6px; border:1px solid var(--border); color:var(--ink-dim); direction:ltr;}
+  .lang-tag.ar{color:var(--gold); border-color:rgba(211,162,75,.35);}
+  .lang-tag.en{color:var(--teal); border-color:rgba(20,184,166,.35);}
+
+  .ctx-body{padding:14px 16px; display:flex; flex-direction:column; gap:14px;}
+  .ctx-block .blk-title{font-size:10px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); font-weight:700; margin:0 0 7px; display:flex; align-items:center; gap:6px;}
+
+  .query-text{background:var(--panel); border:1px solid var(--border); border-radius:9px; padding:9px 12px; font-size:13px; color:var(--ink); line-height:1.6;}
+  .query-text[dir=ltr]{text-align:left;}
+
+  .chip-grid{display:flex; flex-wrap:wrap; gap:8px;}
+  .chip{display:flex; flex-direction:column; gap:2px; background:var(--panel); border:1px solid var(--border); border-radius:9px; padding:6px 11px; min-width:96px;}
+  .chip .k{font-size:9.5px; color:var(--muted);}
+  .chip .v{font-size:12.5px; font-weight:700; color:var(--ink); direction:ltr; text-align:right;}
+  .chip.null{opacity:.45;}
+  .chip.null .v{color:var(--muted); font-weight:400;}
+  .chip.hl{border-color:var(--teal-dim); background:rgba(20,184,166,.07);}
+  .chip.hl .v{color:var(--teal);}
+
+  /* التفضيلات الموزونة */
+  .pref-list{display:flex; flex-direction:column; gap:7px;}
+  .pref-row{display:grid; grid-template-columns:92px 1fr 46px; align-items:center; gap:10px; font-size:11.5px;}
+  .pref-row .plabel{color:var(--ink-dim); text-align:left; direction:ltr;}
+  .pref-track{height:9px; border-radius:99px; background:var(--panel); border:1px solid var(--border); position:relative; overflow:hidden;}
+  .pref-fill{position:absolute; top:0; height:100%; border-radius:99px;}
+  .pref-fill.pos{right:0; background:linear-gradient(90deg, var(--teal-dim), var(--teal));}
+  .pref-fill.neg{right:0; background:linear-gradient(90deg, var(--danger), #f0787c);}
+  .pref-val{font-family:"Cascadia Code","Consolas",monospace; direction:ltr; text-align:left; color:var(--ink-dim);}
+  .pref-val.neg{color:#f0787c;}
+  .empty-inline{font-size:11.5px; color:var(--muted); font-style:italic;}
+
+  .pill-tags{display:flex; flex-wrap:wrap; gap:6px;}
+  .ptag{font-size:11px; padding:3px 9px; border-radius:7px; background:rgba(20,184,166,.1); color:var(--teal); border:1px solid rgba(20,184,166,.25); direction:ltr;}
+  .ptag.excl{background:rgba(229,72,77,.1); color:#f0787c; border-color:rgba(229,72,77,.3);}
+  .ptag.req{background:rgba(211,162,75,.1); color:var(--gold); border-color:rgba(211,162,75,.3);}
+
+  /* التوضيح */
+  .clarify-box{background:rgba(224,168,59,.09); border:1px solid rgba(224,168,59,.35); border-radius:11px; padding:12px 14px;}
+  .clarify-box .ch{font-size:11px; font-weight:800; color:var(--amber); margin-bottom:6px; display:flex; align-items:center; gap:6px;}
+  .clarify-box .cq{font-size:13.5px; color:var(--ink); line-height:1.7; margin-bottom:9px;}
+  .clarify-box .cq[dir=ltr]{text-align:left;}
+  .miss-tags{display:flex; flex-wrap:wrap; gap:6px;}
+  .miss-tag{font-size:10.5px; padding:2px 8px; border-radius:6px; background:rgba(224,168,59,.12); color:var(--amber); border:1px solid rgba(224,168,59,.3); direction:ltr; font-family:"Cascadia Code","Consolas",monospace;}
+  .ready-note{font-size:11.5px; color:var(--ok); display:flex; align-items:center; gap:6px;}
+
+  .ctx-foot{display:flex; align-items:center; gap:8px; padding:8px 16px; border-top:1px solid var(--border); font-size:10px; color:var(--muted);}
+  .ctx-foot .cv{font-family:"Cascadia Code","Consolas",monospace; direction:ltr;}
+  .raw-toggle{margin-right:auto; color:var(--ink-dim); cursor:pointer; background:none; border:none; font-size:10.5px; font-family:inherit; text-decoration:underline dotted; padding:0;}
+  .raw-toggle:hover{color:var(--teal);}
+  .raw-json{display:none; margin:0 16px 12px; background:#081311; border:1px solid var(--border); border-radius:9px; padding:10px; font-size:11px; direction:ltr; text-align:left; max-height:280px; overflow:auto; white-space:pre-wrap; word-break:break-word; color:#9fe6d8; font-family:"Cascadia Code","Consolas",monospace;}
+  .raw-json.show{display:block;}
+
+  /* ---------- شريط الكتابة ---------- */
+  #composer{display:flex; gap:10px; padding:14px 20px; border-top:1px solid var(--border); background:rgba(15,31,29,.6);}
+  #msgInput{flex:1; resize:none; background:var(--panel-2); border:1px solid var(--border); color:var(--ink); border-radius:12px; padding:11px 14px; font-size:13.5px; font-family:inherit; outline:none; max-height:120px; line-height:1.5; transition:border-color .15s, box-shadow .15s;}
+  #msgInput:focus{border-color:var(--teal); box-shadow:0 0 0 3px rgba(20,184,166,.15);}
+  #sendBtn{flex:none; width:46px; height:46px; border-radius:12px; border:none; cursor:pointer; background:linear-gradient(135deg, var(--teal), var(--teal-dim)); color:#062420; font-size:18px; display:flex; align-items:center; justify-content:center; transition:.15s;}
+  #sendBtn:hover{filter:brightness(1.1);}
+  #sendBtn:disabled{opacity:.5; cursor:not-allowed;}
+
+  .typing{display:flex; gap:4px; padding:2px;}
+  .typing span{width:6px; height:6px; border-radius:50%; background:var(--muted); animation:blink 1.2s infinite;}
+  .typing span:nth-child(2){animation-delay:.2s;}
+  .typing span:nth-child(3){animation-delay:.4s;}
+  @keyframes blink{0%,80%,100%{opacity:.25;} 40%{opacity:1;}}
+
+  ::-webkit-scrollbar{width:8px; height:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--border); border-radius:8px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="logo">🧠</div>
+      <div>
+        <h1>مختبر الفهم المنظم</h1>
+        <p>عقد conversation_context_v1 · /context</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">⚙️ الاتصال</div>
+      <div class="field">
+        <label>عنوان الخدمة (Base URL)</label>
+        <div class="row">
+          <input type="text" id="baseUrl" value="http://127.0.0.1:8002">
+          <button class="iconbtn" title="فحص الاتصال" onclick="checkHealth()">↻</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>X-Internal-Secret</label>
+        <input type="password" id="secret" value="dev-secret-change-me">
+      </div>
+      <div class="field">
+        <label>لغة الرد (تجاوز الكشف التلقائي)</label>
+        <select id="langOverride">
+          <option value="">تلقائي (يكشفها من الرسالة)</option>
+          <option value="ar">عربي (ar)</option>
+          <option value="en">إنكليزي (en)</option>
+        </select>
+      </div>
+      <div class="status-row">
+        <span class="dot" id="healthDot"></span>
+        <span id="healthText">لم يُفحص الاتصال بعد</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">🚀 سيناريوهات جاهزة</div>
+      <div class="scenarios" id="scenarios"></div>
+    </div>
+
+    <div class="section" style="border-bottom:none;">
+      <button class="btn danger full" onclick="clearAll()">🗑️ مسح النتائج</button>
+    </div>
+
+    <div class="footer-note">
+      نقطة <b>/context</b> بلا حالة: كل رسالة تُحلَّل مستقلةً وتُعيد فهمًا منظمًا
+      (نية + قيود + تفضيلات موزونة + سياق رحلة + جودة فهم) لتستهلكه طبقة Laravel.
+      لا تُخزَّن جلسة ولا يُستدعى محرك توصية — فقط الاستخراج.
+    </div>
+  </aside>
+
+  <main id="main">
+    <div id="topbar">
+      <button class="iconbtn" id="menuBtn" onclick="toggleSidebar(true)">☰</button>
+      <div class="title">
+        مختبر /context
+        <small>conversation_context_v1</small>
+      </div>
+      <span class="pill" id="countPill">0 تحليل</span>
+    </div>
+
+    <div id="messages">
+      <div class="empty-state" id="emptyState">
+        <div class="big">🧠</div>
+        <h2>حلّل فهم رسالة</h2>
+        <p>اكتب رسالة بالأسفل أو اختر سيناريو من الشريط الجانبي. سيعرض العقد
+          المنظم الذي تعيده الطبقة لـ Laravel: النية، القيود، التفضيلات الموزونة،
+          سياق الرحلة، الاستبعادات، وسؤال التوضيح عند نقص المعلومات.</p>
+      </div>
+    </div>
+
+    <div id="composer">
+      <textarea id="msgInput" rows="1" placeholder="اكتب رسالة لتحليل فهمها… (Enter للإرسال، Shift+Enter لسطر جديد)"></textarea>
+      <button id="sendBtn" onclick="onSend()">➤</button>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ============================= الإعدادات ============================= */
+const LS_KEY = "contextTesterSettings_v1";
+
+function loadSettings(){
+  try{
+    const s = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
+    if(s.baseUrl) document.getElementById("baseUrl").value = s.baseUrl;
+    if(s.secret) document.getElementById("secret").value = s.secret;
+    if(s.langOverride) document.getElementById("langOverride").value = s.langOverride;
+  }catch(e){}
+}
+function persistSettings(){
+  const data = {
+    baseUrl: document.getElementById("baseUrl").value.trim(),
+    secret: document.getElementById("secret").value,
+    langOverride: document.getElementById("langOverride").value,
+  };
+  localStorage.setItem(LS_KEY, JSON.stringify(data));
+  return data;
+}
+["baseUrl","secret","langOverride"].forEach(id=>{
+  document.addEventListener("DOMContentLoaded", ()=>{
+    document.getElementById(id).addEventListener("change", persistSettings);
+  });
+});
+
+function toggleSidebar(open){
+  document.getElementById("sidebar").classList.toggle("open", open);
+  document.getElementById("sidebarBackdrop").classList.toggle("show", open);
+}
+
+/* ============================= فحص الصحة ============================= */
+async function checkHealth(){
+  const dot = document.getElementById("healthDot");
+  const text = document.getElementById("healthText");
+  const base = document.getElementById("baseUrl").value.trim().replace(/\/$/, "");
+  text.textContent = "جاري الفحص…";
+  try{
+    const res = await fetch(base + "/health");
+    if(res.ok){ dot.className = "dot ok"; text.textContent = "متصل — الخدمة تعمل"; }
+    else{ dot.className = "dot bad"; text.textContent = "الخدمة ترد بخطأ (" + res.status + ")"; }
+  }catch(e){
+    dot.className = "dot bad";
+    text.textContent = "تعذّر الاتصال — تأكد من uvicorn وCORS";
+  }
+}
+
+/* ============================= السيناريوهات ============================= */
+const SCENARIOS = [
+  {tag:"كامل", label:"طلب مكتمل (كل الحقول)", text:"أريد مكاناً أثرياً هادئاً ومجانياً في دمشق، مناسباً للعائلة والتصوير"},
+  {tag:"نقص", label:"معلومات ناقصة → توضيح", text:"أريد مكاناً مناسباً غداً"},
+  {tag:"بحث", label:"بحث صريح (search_places)", text:"دورلي مطاعم رخيصة بحلب"},
+  {tag:"خطة", label:"إنشاء خطة (create_plan)", text:"اعملي خطة 3 ايام بدمشق لعيلتي"},
+  {tag:"تفاصيل", label:"تفاصيل مكان", text:"شو اوقات دوام المتحف الوطني؟"},
+  {tag:"نفي", label:"استبعاد فئة (بدون متاحف)", text:"بدي مكان طبيعي هادئ للتصوير بطرطوس بدون متاحف"},
+  {tag:"بلدة", label:"بلدة داخل محافظة (بصرى)", text:"شو في ببصرى؟"},
+  {tag:"وصول", label:"متطلب إتاحة (كرسي متحرك)", text:"بدي مكان مناسب لكرسي متحرك بدمشق"},
+  {tag:"زوجان", label:"تفضيل رومانسي", text:"مكان رومانسي مع خطيبتي بطرطوس عالغروب"},
+  {tag:"EN", label:"English · plan", text:"plan a 3 day trip to latakia for my family, we love the sea and food"},
+  {tag:"EN", label:"English · details", text:"is palmyra worth visiting?"},
+];
+function renderScenarios(){
+  const wrap = document.getElementById("scenarios");
+  wrap.innerHTML = "";
+  SCENARIOS.forEach(s=>{
+    const btn = document.createElement("button");
+    btn.className = "scenario-btn";
+    btn.innerHTML = `<span class="tag">${s.tag}</span><span class="txt"><b>${s.label}</b><br>${escapeHtml(s.text)}</span>`;
+    btn.onclick = ()=> analyze(s.text);
+    wrap.appendChild(btn);
+  });
+}
+
+/* ============================= قواميس العرض ============================= */
+const INTENT_META = {
+  recommend_places:{cls:"ib-recommend", ar:"توصية بأماكن", icon:"✨"},
+  search_places:   {cls:"ib-search",    ar:"بحث عن أماكن", icon:"🔎"},
+  place_details:   {cls:"ib-details",   ar:"تفاصيل مكان",  icon:"📍"},
+  create_plan:     {cls:"ib-create",    ar:"إنشاء خطة",    icon:"🗺️"},
+  modify_plan:     {cls:"ib-modify",    ar:"تعديل خطة",    icon:"✏️"},
+  general_question:{cls:"ib-general",   ar:"سؤال عام",     icon:"💬"},
+};
+const FILTER_LABELS = {governorate:"المحافظة", city:"المدينة", category:"الفئة", budget_tier:"الميزانية"};
+const PREF_LABELS = {history:"تاريخ", nature:"طبيعة", family:"عائلة", romantic:"رومانسي", culture:"ثقافة", food:"طعام", shopping:"تسوق", photography:"تصوير", adventure:"مغامرة", crowdedness:"الازدحام"};
+const TRIP_LABELS = {group_type:"المجموعة", duration_minutes:"المدة (دقيقة)", preferred_time:"الوقت المفضّل", season:"الموسم", visit_date:"تاريخ الزيارة", physical_difficulty:"الصعوبة البدنية"};
+const MISS_LABELS = {governorate_or_city:"المحافظة/المدينة", trip_interests:"نوع الاهتمامات", duration:"مدة الرحلة", group_type:"نوع المجموعة"};
+
+/* ============================= العدّاد ============================= */
+let count = 0;
+function bump(){ count++; document.getElementById("countPill").textContent = count + " تحليل"; }
+
+/* ============================= أدوات الرسم ============================= */
+function scrollToBottom(){ const el = document.getElementById("messages"); el.scrollTop = el.scrollHeight; }
+function hideEmptyState(){ const el = document.getElementById("emptyState"); if(el) el.remove(); }
+function escapeHtml(str){ const d = document.createElement("div"); d.textContent = str ?? ""; return d.innerHTML; }
+function isRtl(v){ return !/[a-zA-Z]/.test(v || "") || (v||"").match(/[؀-ۿ]/); }
+
+function appendUserMessage(text, container){
+  const dir = /[a-zA-Z]/.test(text) && !/[؀-ۿ]/.test(text) ? "ltr" : "rtl";
+  const el = document.createElement("div");
+  el.className = "in-msg";
+  el.innerHTML = `<div class="avatar">🧑</div><div class="bubble" dir="${dir}">${escapeHtml(text)}</div>`;
+  container.appendChild(el);
+}
+
+function appendTyping(container){
+  const el = document.createElement("div");
+  el.className = "ctx-panel"; el.id = "typingPanel";
+  el.innerHTML = `<div class="ctx-body"><div class="typing"><span></span><span></span><span></span></div></div>`;
+  container.appendChild(el);
+}
+
+/* بناء لوحة الفهم المنظم من عقد conversation_context_v1 */
+function renderContextPanel(d){
+  const meta = INTENT_META[d.intent] || {cls:"ib-general", ar:d.intent, icon:"•"};
+  const conf = typeof d.confidence === "number" ? d.confidence : 0;
+  const confPct = Math.round(conf * 100);
+  const confColor = conf >= 0.7 ? "var(--ok)" : conf >= 0.45 ? "var(--teal)" : "var(--amber)";
+  const lang = d.language || "ar";
+
+  // القيود
+  const filterChips = ["governorate","city","category","budget_tier"].map(k=>{
+    const v = d.filters ? d.filters[k] : null;
+    const isNull = v === null || v === undefined || v === "";
+    const hl = !isNull && (k==="governorate"||k==="category");
+    return `<div class="chip ${isNull?"null":""} ${hl?"hl":""}"><span class="k">${FILTER_LABELS[k]}</span><span class="v">${isNull?"—":escapeHtml(String(v))}</span></div>`;
+  }).join("");
+
+  // التفضيلات الموزونة
+  const prefs = d.preferences || {};
+  const prefKeys = Object.keys(prefs);
+  let prefHtml;
+  if(prefKeys.length){
+    prefHtml = `<div class="pref-list">` + prefKeys.map(k=>{
+      const w = prefs[k];
+      const neg = w < 0;
+      const pct = Math.min(Math.abs(w) * 100, 100);
+      const label = (PREF_LABELS[k] || k);
+      return `<div class="pref-row">
+        <span class="plabel">${escapeHtml(label)} <span style="color:var(--muted)">${k}</span></span>
+        <div class="pref-track"><div class="pref-fill ${neg?"neg":"pos"}" style="width:${pct}%"></div></div>
+        <span class="pref-val ${neg?"neg":""}">${w>0?"+":""}${w}</span>
+      </div>`;
+    }).join("") + `</div>`;
+  }else{
+    prefHtml = `<div class="empty-inline">— لا تفضيلات مستخرجة</div>`;
+  }
+
+  // سياق الرحلة (الحقول غير الفارغة فقط)
+  const trip = d.trip_context || {};
+  const tripKeys = Object.keys(TRIP_LABELS).filter(k=> trip[k] !== null && trip[k] !== undefined && trip[k] !== "");
+  const tripHtml = tripKeys.length
+    ? `<div class="chip-grid">` + tripKeys.map(k=>`<div class="chip hl"><span class="k">${TRIP_LABELS[k]}</span><span class="v">${escapeHtml(String(trip[k]))}</span></div>`).join("") + `</div>`
+    : `<div class="empty-inline">— لا سياق رحلة محدد</div>`;
+
+  // الاستبعادات
+  const excl = d.exclusions || {categories:[], place_ids:[], requirements:[]};
+  const exclParts = [];
+  (excl.categories||[]).forEach(c=> exclParts.push(`<span class="ptag excl">🚫 ${escapeHtml(c)}</span>`));
+  (excl.place_ids||[]).forEach(p=> exclParts.push(`<span class="ptag excl">🚫 ${escapeHtml(p)}</span>`));
+  (excl.requirements||[]).forEach(r=> exclParts.push(`<span class="ptag req">♿ ${escapeHtml(r)}</span>`));
+  const exclHtml = exclParts.length ? `<div class="pill-tags">${exclParts.join("")}</div>` : `<div class="empty-inline">— لا استبعادات</div>`;
+
+  // الموقع (يُعرض فقط إن وُجد شيء)
+  const loc = d.location || {};
+  const hasLoc = loc.latitude!=null || loc.longitude!=null || loc.radius_km!=null;
+  const locBlock = hasLoc ? `
+    <div class="ctx-block">
+      <div class="blk-title">📌 الموقع</div>
+      <div class="chip-grid">
+        <div class="chip ${loc.latitude==null?"null":"hl"}"><span class="k">lat</span><span class="v">${loc.latitude ?? "—"}</span></div>
+        <div class="chip ${loc.longitude==null?"null":"hl"}"><span class="k">lng</span><span class="v">${loc.longitude ?? "—"}</span></div>
+        <div class="chip ${loc.radius_km==null?"null":"hl"}"><span class="k">radius_km</span><span class="v">${loc.radius_km ?? "—"}</span></div>
+      </div>
+    </div>` : "";
+
+  // التوضيح / الجاهزية
+  let clarify;
+  if(d.requires_clarification){
+    const q = d.clarification_question || "";
+    const dir = /[a-zA-Z]/.test(q) && !/[؀-ۿ]/.test(q) ? "ltr" : "rtl";
+    const missTags = (d.missing_information||[]).map(m=>`<span class="miss-tag" title="${escapeHtml(MISS_LABELS[m]||m)}">${escapeHtml(m)}</span>`).join("");
+    clarify = `<div class="clarify-box">
+      <div class="ch">⚠️ يحتاج توضيحًا قبل التنفيذ</div>
+      <div class="cq" dir="${dir}">${escapeHtml(q)}</div>
+      <div class="miss-tags">${missTags}</div>
+    </div>`;
+  }else{
+    clarify = `<div class="ready-note">✅ المعلومات كافية — جاهز لتمريره إلى Laravel</div>`;
+  }
+
+  const qtDir = /[a-zA-Z]/.test(d.query_text||"") && !/[؀-ۿ]/.test(d.query_text||"") ? "ltr" : "rtl";
+  const rawId = "raw_" + Math.random().toString(36).slice(2,9);
+
+  return `<div class="ctx-panel">
+    <div class="ctx-head">
+      <span class="intent-badge ${meta.cls}">${meta.icon} ${meta.ar} <span class="en">${d.intent}</span></span>
+      <span class="lang-tag ${lang}">${lang}</span>
+      <div class="conf-wrap">
+        <span>ثقة</span>
+        <div class="conf-track"><div class="conf-fill" style="width:${confPct}%; background:${confColor}"></div></div>
+        <span class="conf-val">${conf.toFixed(2)}</span>
+      </div>
+    </div>
+    <div class="ctx-body">
+      <div class="ctx-block">
+        <div class="blk-title">🔤 query_text <span style="color:var(--muted); text-transform:none; letter-spacing:0">(للبحث الدلالي BGE-M3)</span></div>
+        <div class="query-text" dir="${qtDir}">${escapeHtml(d.query_text || "—")}</div>
+      </div>
+      <div class="ctx-block">
+        <div class="blk-title">🎯 القيود الإلزامية · filters</div>
+        <div class="chip-grid">${filterChips}</div>
+      </div>
+      <div class="ctx-block">
+        <div class="blk-title">⚖️ التفضيلات الموزونة · preferences</div>
+        ${prefHtml}
+      </div>
+      <div class="ctx-block">
+        <div class="blk-title">🧳 سياق الرحلة · trip_context</div>
+        ${tripHtml}
+      </div>
+      <div class="ctx-block">
+        <div class="blk-title">⛔ الاستبعادات · exclusions</div>
+        ${exclHtml}
+      </div>
+      ${locBlock}
+      <div class="ctx-block">
+        ${clarify}
+      </div>
+    </div>
+    <div class="ctx-foot">
+      <span>📄 <span class="cv">${escapeHtml(d.contract_version || "conversation_context_v1")}</span></span>
+      <button class="raw-toggle" onclick="document.getElementById('${rawId}').classList.toggle('show')">عرض/إخفاء JSON الخام</button>
+    </div>
+    <pre class="raw-json" id="${rawId}">${escapeHtml(JSON.stringify(d, null, 2))}</pre>
+  </div>`;
+}
+
+function appendErrorPanel(text, container){
+  const el = document.createElement("div");
+  el.className = "ctx-panel error";
+  el.innerHTML = `<div class="ctx-error-text">⚠️ ${escapeHtml(text)}</div>`;
+  container.appendChild(el);
+}
+
+/* ============================= الإرسال ============================= */
+async function analyze(text){
+  text = (text || "").trim();
+  if(!text) return;
+  const cfg = persistSettings();
+  if(!cfg.baseUrl){ return; }
+
+  hideEmptyState();
+  document.getElementById("msgInput").value = "";
+  autoGrow();
+
+  const wrap = document.getElementById("messages");
+  const turn = document.createElement("div");
+  turn.className = "turn";
+  wrap.appendChild(turn);
+  appendUserMessage(text, turn);
+  bump();
+  appendTyping(turn);
+  scrollToBottom();
+  setSending(true);
+
+  const body = { message: text };
+  if(cfg.langOverride) body.language = cfg.langOverride;
+
+  try{
+    const res = await fetch(cfg.baseUrl.replace(/\/$/, "") + "/context", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", "X-Internal-Secret":cfg.secret },
+      body: JSON.stringify(body),
+    });
+    const tp = document.getElementById("typingPanel"); if(tp) tp.remove();
+
+    if(!res.ok){
+      let detail = res.statusText;
+      try{ const j = await res.json(); detail = j.detail ? (typeof j.detail==="string"?j.detail:JSON.stringify(j.detail)) : JSON.stringify(j); }catch(e){}
+      appendErrorPanel(`خطأ ${res.status}: ${detail}`, turn);
+      scrollToBottom();
+      return;
+    }
+    const data = await res.json();
+    turn.insertAdjacentHTML("beforeend", renderContextPanel(data));
+    scrollToBottom();
+  }catch(e){
+    const tp = document.getElementById("typingPanel"); if(tp) tp.remove();
+    appendErrorPanel("تعذّر الوصول للخدمة. تأكد من تشغيل uvicorn على العنوان المحدد ومن CORS. (" + e.message + ")", turn);
+    scrollToBottom();
+  }finally{
+    setSending(false);
+  }
+}
+
+function setSending(s){ document.getElementById("sendBtn").disabled = s; }
+function onSend(){ analyze(document.getElementById("msgInput").value); }
+
+function clearAll(){
+  document.getElementById("messages").innerHTML = `
+    <div class="empty-state" id="emptyState">
+      <div class="big">🧠</div>
+      <h2>حلّل فهم رسالة</h2>
+      <p>اكتب رسالة بالأسفل أو اختر سيناريو من الشريط الجانبي. سيعرض العقد
+        المنظم الذي تعيده الطبقة لـ Laravel: النية، القيود، التفضيلات الموزونة،
+        سياق الرحلة، الاستبعادات، وسؤال التوضيح عند نقص المعلومات.</p>
+    </div>`;
+  count = 0;
+  document.getElementById("countPill").textContent = "0 تحليل";
+}
+
+/* ============================= لوحة المفاتيح ============================= */
+function autoGrow(){
+  const el = document.getElementById("msgInput");
+  el.style.height = "auto";
+  el.style.height = Math.min(el.scrollHeight, 120) + "px";
+}
+document.addEventListener("DOMContentLoaded", ()=>{
+  loadSettings();
+  renderScenarios();
+  checkHealth();
+  const input = document.getElementById("msgInput");
+  input.addEventListener("input", autoGrow);
+  input.addEventListener("keydown", (e)=>{
+    if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); onSend(); }
+  });
+});
+</script>
+</body>
+</html>
