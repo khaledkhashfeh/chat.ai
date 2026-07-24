@@ -37,7 +37,8 @@ GROUPS: dict[str, list[str]] = {
 
 BUDGET: dict[str, list[str]] = {
     "low": ["اقتصادي", "رخيص", "على قد الحال", "عقد الحال", "ميزانيه محدوده", "قليل المصاريف", "cheap", "budget"],
-    "high": ["فخم", "فاخر", "luxury", "fancy"],
+    "medium": ["متوسط", "وسط", "معقول", "متوسطه", "medium", "moderate", "mid"],
+    "high": ["فخم", "فاخر", "غالي", "luxury", "fancy", "expensive"],
 }
 
 INTEREST_TAGS: dict[str, str] = {

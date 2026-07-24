@@ -38,18 +38,22 @@ QUESTIONS: dict[str, dict[str, str]] = {
     },
 }
 
-# أسئلة إثراء search — تُطرح بعد العرض لا قبل الاستدعاء (أولوية: group_type ثم
-# budget_level ثم dates)، وسؤال واحد فقط لكل جلسة بحث (memory.search_enrichment_asked).
-ENRICHMENT_QUESTIONS: dict[str, dict[str, str]] = {
+# أسئلة الجمع الموحّدة (نمط «اجمع أولًا ثم استدعِ») — سؤال واحد لكل حقل ناقص،
+# بترتيب الأولوية المحدَّد في dialogue.py. مفاتيحها تغطي كل الحقول القابلة للجمع.
+GATHER_QUESTIONS: dict[str, dict[str, str]] = {
     "ar": {
+        "destination": "لوين ناوي تروح؟ (أي مدينة بسوريا)",
+        "interests": "شو نوع الأماكن يلي بتحبها؟ تاريخية، طبيعية، بحر، أكل، أسواق، متاحف…",
+        "budget_level": "قديش ميزانيتك تقريبًا؟ اقتصادية، متوسطة، ولا مرتاح أكتر؟",
         "group_type": "رايح لحالك، مع العيلة، ولا مع أصحاب؟",
-        "budget_level": "بتفضل خيارات اقتصادية، ولا مرتاح أكتر بالميزانية؟",
-        "dates": "عندك تواريخ محددة بخاطرك للرحلة؟",
+        "duration_days": "كم يوم معك للرحلة؟",
     },
     "en": {
+        "destination": "Where would you like to go? (any city in Syria)",
+        "interests": "What kind of places do you like? Historical, nature, sea, food, markets, museums…",
+        "budget_level": "What's your budget roughly? Budget, mid-range, or comfortable?",
         "group_type": "Traveling solo, with family, or with friends?",
-        "budget_level": "Prefer budget-friendly options, or something fancier?",
-        "dates": "Do you have specific dates in mind?",
+        "duration_days": "How many days do you have?",
     },
 }
 
@@ -58,9 +62,9 @@ T: dict[str, dict[str, list[str]]] = {
         "ar": ["لقيتلك {n} أماكن حلوة 👇 شو رأيك فيهن؟", "هي أفضل {n} خيارات — بتحب تعرف أكتر عن حدا منهن؟"],
         "en": ["Found {n} great options 👇 What do you think?", "Here are the top {n} — want details on any of them?"],
     },
-    "show_places_ask": {
-        "ar": ["لقيتلك {n} أماكن حلوة 👇 {question}", "هي أفضل {n} خيارات 👆 {question}"],
-        "en": ["Found {n} great options 👇 {question}", "Here are the top {n} 👆 {question}"],
+    "show_places_partial": {
+        "ar": ["رح جيبلك اقتراحات عامة هلأ، وفينا نضبطها أكتر بعدين 👇 ({n} أماكن)", "بما إنه ما توضّح كل شي، هي {n} اقتراحات مبدئية 👇 وفينا نحسّنها"],
+        "en": ["I'll go with general suggestions for now — we can refine later 👇 ({n} places)", "Since not everything's clear, here are {n} initial picks 👇 we can tune them"],
     },
     "no_results": {
         "ar": ["{reason}. بتحب نوسّع البحث؟", "ما لقيت شي مطابق تمامًا — {reason}."],
@@ -181,8 +185,9 @@ def question_for_missing_field(field: str, language: str) -> str:
     return QUESTIONS[language][field]
 
 
-def enrichment_question_for(field: str, language: str) -> str:
-    return ENRICHMENT_QUESTIONS[language][field]
+def gather_question_for(field: str, language: str) -> str:
+    """سؤال جمع حقل واحد (نمط اجمع-أولًا) — يغطي كل الحقول القابلة للجمع."""
+    return GATHER_QUESTIONS[language][field]
 
 
 # أسئلة توضيح عقد conversation_context_v1 عند نقص معلومة إلزامية (للعرض عبر Laravel).

@@ -33,9 +33,6 @@ from app.shared.models import (
     WorkingMemory,
 )
 
-# الحد الأدنى لبناء خطة — أولوية السؤال عند النقص: destination ثم duration_days ثم group_type
-REQUIRED_FOR_PLAN = ("destination", "duration_days", "group_type")
-
 # قاموس أفعال التعديل (spec.md §4 صف modify_plan) — يُفحص بهذا الترتيب تحديدًا
 # كي لا تسبق كلمة عامة كلمة أكثر تحديدًا (مثلًا extend_days قبل add العامة).
 _MODIFY_ACTION_KEYWORDS: dict[str, list[str]] = {
@@ -93,26 +90,32 @@ async def handle_turn(session: SessionData, raw_text: str, user_id: str) -> Chat
         else:
             setattr(state, field, value)
 
-    # هل قدّم المستخدم بهذا الدور حقلًا إلزاميًا لخطة؟ (لتصفير عدّاد التهرّب)
-    made_plan_progress = any(f in found for f in REQUIRED_FOR_PLAN)
+    # هل قدّم المستخدم بهذا الدور حقلًا قابلًا للجمع؟ (لتصفير عدّاد التهرّب)
+    made_progress = any(f in found for f in _GATHERABLE_FIELDS)
 
-    # استئناف جمع معلومات الخطة: جواب مقتضب ("لحلب"، "مع عيلتي") يُصنَّف unclear،
-    # فنعيده لمسار build_plan إن كنا بمنتصف جمع خطة (pending_intent). أي نية واضحة
-    # مختلفة تلغي التعليق (المستخدم بدّل الموضوع).
-    if intent_label == "unclear" and memory.pending_intent == "build_plan":
-        intent_label = "build_plan"
-    elif intent_label not in ("unclear", "build_plan") and memory.pending_intent:
-        memory.pending_intent = None
+    # استئناف الجمع: الجواب المقتضب ("لحلب"، "مع عيلتي") قد يُصنَّف unclear أو
+    # search، فنمتصّه ضمن المسار المعلَّق بدل تشتيته. نية غير سياحية واضحة (تفاصيل/
+    # تعديل/رفض/ترحيب) تلغي التعليق (المستخدم بدّل الموضوع فعلًا).
+    if memory.pending_intent == "recommend":
+        if intent_label in ("unclear", "search"):
+            intent_label = "search"
+        else:
+            memory.pending_intent = None  # نية مختلفة (حتى build_plan) → بدّل المسار
+    elif memory.pending_intent == "build_plan":
+        if intent_label in ("unclear", "search", "build_plan"):
+            intent_label = "build_plan"
+        else:
+            memory.pending_intent = None
 
     # [5] القرار (دليل قرار الاستدعاء — spec.md §4)
     if intent_label == "search":
-        response = await _handle_search(text, state, memory, user_id)
+        response = await _handle_search(text, state, memory, user_id, made_progress)
     elif intent_label == "details":
         response = await _handle_details(text, ref, state, memory)
     elif intent_label == "compare":
         response = await _handle_compare(text, ref, state, memory)
     elif intent_label == "build_plan":
-        response = await _handle_build_plan(state, memory, made_plan_progress)
+        response = await _handle_build_plan(state, memory, made_progress)
     elif intent_label == "modify_plan":
         response = await _handle_modify_plan(text, ref, state, memory)
     elif intent_label == "add_to_plan":
@@ -131,24 +134,69 @@ async def handle_turn(session: SessionData, raw_text: str, user_id: str) -> Chat
 
 
 # ---------------------------------------------------------------------------
-# search
+# نمط الجمع الموحّد: «اجمع الحقول أولًا ثم استدعِ» (قرار المالك) — سؤال واحد لكل
+# دور بترتيب الأولوية، مع استئناف الأجوبة المقتضبة (pending_intent) وسقف تهرّب.
+# ---------------------------------------------------------------------------
+
+# ترتيب أولوية الجمع (المدينة → التصنيفات → الميزانية → المجموعة [→ المدة للخطة])
+_GATHER_FOR_RECOMMEND = ("destination", "interests", "budget_level", "group_type")
+_GATHER_FOR_PLAN = ("destination", "interests", "budget_level", "group_type", "duration_days")
+_GATHERABLE_FIELDS = _GATHER_FOR_PLAN  # المجموعة الأشمل (لكشف التقدّم)
+_MAX_GATHER_ASKS = 2  # بعد تهرّبين متتاليين نتابع بما توفّر
+
+
+def _first_missing_gather(state: ConversationState, fields: tuple[str, ...]) -> Optional[str]:
+    for f in fields:
+        value = getattr(state, f)
+        if isinstance(value, list):
+            if not value:
+                return f
+        elif not value:
+            return f
+    return None
+
+
+def _gather_step(
+    state: ConversationState,
+    memory: WorkingMemory,
+    fields: tuple[str, ...],
+    made_progress: bool,
+    pending_tag: str,
+) -> Optional[ChatResponse]:
+    """يسأل عن أول حقل ناقص (سؤال واحد) ويرجّع الرد، أو None حين يكتمل الجمع أو
+    يُستنفَد سقف التهرّب (عندها يتابع المستدعي بما توفّر). يُدير gather_asks
+    و pending_intent مركزيًا."""
+    if _first_missing_gather(state, fields) is None:
+        memory.gather_asks = 0
+        memory.pending_intent = None
+        return None
+    if made_progress:
+        memory.gather_asks = 0  # المستخدم تقدّم فعليًا → ليس تهرّبًا
+    if memory.gather_asks >= _MAX_GATHER_ASKS:
+        memory.pending_intent = None  # نتابع بما توفّر (يُصرَّح بذلك في الرد)
+        return None
+    memory.gather_asks += 1
+    memory.pending_intent = pending_tag
+    memory.last_bot_action = "asked_missing_info"
+    field = _first_missing_gather(state, fields)
+    question = responses.gather_question_for(field, state.language)
+    return responses.respond("ask", state.language, state=state, question=question)
+
+
+# ---------------------------------------------------------------------------
+# search — اجمع (مدينة + تصنيفات + ميزانية + مجموعة) ثم استدعِ التوصية
 # ---------------------------------------------------------------------------
 
 
-# أولوية سؤال الإثراء بعد عرض نتائج البحث (لا يُسأل قبل الاستدعاء أبدًا)
-_SEARCH_ENRICHMENT_ORDER = ("group_type", "budget_level", "dates")
-
-
-async def _handle_search(text: str, state: ConversationState, memory: WorkingMemory, user_id: str) -> ChatResponse:
+async def _handle_search(
+    text: str, state: ConversationState, memory: WorkingMemory, user_id: str, made_progress: bool = False
+) -> ChatResponse:
     lang = state.language
 
-    # إلزامي واحد على الأقل من destination/interests قبل الاستدعاء — «استكشاف مفتوح»
-    # («بدي سافر بس ما بعرف لوين») لا يُستجوَب: نستنتج اهتمامات مبدئية من الملف
-    # الشخصي (profile) بدل الحجب أو التخمين، ثم نعرض توجهات متنوعة فورًا (spec.md §5.1).
-    if not state.destination and not state.interests:
-        prof = await recommender.profile(user_id=user_id)
-        if prof.top_tags:
-            state.interests = list(dict.fromkeys([*state.interests, *prof.top_tags]))
+    ask = _gather_step(state, memory, _GATHER_FOR_RECOMMEND, made_progress, "recommend")
+    if ask is not None:
+        return ask
+    proceeded_partial = _first_missing_gather(state, _GATHER_FOR_RECOMMEND) is not None
 
     result = await recommender.search(query=text, state=state, top_k=8)
 
@@ -162,27 +210,8 @@ async def _handle_search(text: str, state: ConversationState, memory: WorkingMem
         for i, c in enumerate(result.results)
     ]
     memory.last_bot_action = "showed_recommendations"
-
-    if not memory.search_enrichment_asked:
-        question = _next_search_question(state, lang)
-        if question:
-            memory.search_enrichment_asked = True
-            return responses.respond(
-                "show_places_ask", lang, state=state, cards=result.results, n=len(result.results), question=question
-            )
-
-    return responses.respond("show_places", lang, state=state, cards=result.results, n=len(result.results))
-
-
-def _next_search_question(state: ConversationState, lang: str) -> Optional[str]:
-    """سؤال واحد بعد العرض: الوجهة أولًا إن غابت تمامًا (استكشاف مفتوح)، وإلا
-    أول حقل إثراء ناقص بالترتيب (group_type ثم budget_level ثم dates)."""
-    if not state.destination:
-        return responses.question_for_missing_field("destination", lang)
-    for field in _SEARCH_ENRICHMENT_ORDER:
-        if not getattr(state, field):
-            return responses.enrichment_question_for(field, lang)
-    return None
+    key = "show_places_partial" if proceeded_partial else "show_places"
+    return responses.respond(key, lang, state=state, cards=result.results, n=len(result.results))
 
 
 # ---------------------------------------------------------------------------
@@ -254,8 +283,7 @@ async def _handle_compare(text: str, ref: dict, state: ConversationState, memory
 # ---------------------------------------------------------------------------
 
 
-# الحد الأقصى لأسئلة الحقول الناقصة المتتالية قبل الاستدعاء بالافتراضي (استراتيجية السؤال، القاعدة 8)
-_MAX_BUILD_PLAN_ASKS = 2
+# قيم افتراضية للحد الأدنى الصلب الذي تحتاجه أداة البناء (لا اختراع أماكن — بارامترات رحلة فقط)
 _DEFAULT_DESTINATION = "دمشق"
 _DEFAULT_DURATION_DAYS = 2
 _DEFAULT_GROUP_TYPE = "solo"
@@ -265,29 +293,19 @@ async def _handle_build_plan(
     state: ConversationState, memory: WorkingMemory, made_progress: bool = False
 ) -> ChatResponse:
     lang = state.language
-    missing = [f for f in REQUIRED_FOR_PLAN if not getattr(state, f)]
-    used_defaults = False
-    if missing:
-        # المستخدم قدّم حقلًا هذا الدور → ليس تهرّبًا، صفّر العدّاد (جمع تدريجي طبيعي)
-        if made_progress:
-            memory.build_plan_asks = 0
-        if memory.build_plan_asks >= _MAX_BUILD_PLAN_ASKS:
-            # تهرّب/عدم إجابة مرتين → نستدعي الأداة بما توفر مع تعبئة الناقص
-            # بقيم افتراضية معقولة (لا اختراع معلومات عن أماكن — فقط بارامترات
-            # تشغيلية للرحلة نفسها)، ونصرّح بذلك بالرد.
-            if not state.destination:
-                state.destination = [_DEFAULT_DESTINATION]
-            if not state.duration_days:
-                state.duration_days = _DEFAULT_DURATION_DAYS
-            if not state.group_type:
-                state.group_type = _DEFAULT_GROUP_TYPE
-            used_defaults = True
-        else:
-            memory.build_plan_asks += 1
-            memory.pending_intent = "build_plan"  # نحن بمنتصف جمع خطة — تابع الجواب التالي
-            memory.last_bot_action = "asked_missing_info"
-            question = responses.question_for_missing_field(missing[0], lang)
-            return responses.respond("ask", lang, state=state, question=question)
+
+    ask = _gather_step(state, memory, _GATHER_FOR_PLAN, made_progress, "build_plan")
+    if ask is not None:
+        return ask
+    used_defaults = _first_missing_gather(state, _GATHER_FOR_PLAN) is not None
+
+    # ضمان الحد الأدنى الصلب لأداة البناء عند التهرّب (dest+duration+group)
+    if not state.destination:
+        state.destination = [_DEFAULT_DESTINATION]
+    if not state.duration_days:
+        state.duration_days = _DEFAULT_DURATION_DAYS
+    if not state.group_type:
+        state.group_type = _DEFAULT_GROUP_TYPE
 
     if state.saved_place_ids:
         # المستخدم اختار أماكنه بنفسه → feasibility أولًا (spec.md §4)
@@ -306,7 +324,7 @@ async def _handle_build_plan(
 
     memory.current_plan = plan_result
     state.current_plan_id = plan_result.plan_id
-    memory.build_plan_asks = 0
+    memory.gather_asks = 0
     memory.pending_intent = None  # انتهى جمع الخطة
     summary = plan_result.summary_ar if lang == "ar" else plan_result.summary_en
     if used_defaults:

@@ -371,12 +371,10 @@ class WorkingMemory(BaseModel):
     current_plan: Optional[PlanObject] = None
     last_bot_action: Optional[str] = None
     # عدّادات داخلية لاستراتيجية السؤال (ليست جزءًا من عقد contract.md) —
-    # build_plan_asks: أدوار متتالية **بلا تقدّم** أثناء جمع الخطة (تهرّب) — سقفها يفرض الافتراضيات.
-    # search_enrichment_asked: يمنع تكرار سؤال الإثراء (group_type/budget_level/dates) كل بحث.
-    # pending_intent: نية جمع معلّقة (مثل "build_plan") كي يُفهَم الجواب المقتضب
-    #   ("لحلب"، "مع عيلتي") تكملةً للمسار لا رسالة غامضة جديدة.
-    build_plan_asks: int = 0
-    search_enrichment_asked: bool = False
+    # gather_asks: أدوار متتالية **بلا تقدّم** أثناء جمع المعلومات (تهرّب) — سقفها يُنهي الجمع بما توفّر.
+    # pending_intent: نية جمع معلّقة ("recommend"/"build_plan") كي يُفهَم الجواب
+    #   المقتضب ("لحلب"، "مع عيلتي") تكملةً للمسار لا رسالة غامضة جديدة.
+    gather_asks: int = 0
     pending_intent: Optional[str] = None
 
 

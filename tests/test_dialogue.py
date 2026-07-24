@@ -21,9 +21,11 @@ def new_session() -> SessionData:
 # ---------------------------------------------------------------------------
 
 
-def test_search_updates_working_memory_with_ranked_list():
+def test_search_recommends_after_full_profile_gathered():
+    """نمط اجمع-أولًا: رسالة تحمل المدينة + التصنيف + الميزانية + المجموعة →
+    يستدعي التوصية مباشرةً ويعرض البطاقات (لا يبقى يسأل)."""
     session = new_session()
-    response = run(dialogue.handle_turn(session, "اقترحلي مطاعم بحلب", "u1"))
+    response = run(dialogue.handle_turn(session, "اقترحلي مطاعم رخيصة بحلب لعيلتي", "u1"))
     assert response.cards is not None and len(response.cards) > 0
     assert session.memory.last_bot_action == "showed_recommendations"
     assert len(session.memory.last_recommendations) == len(response.cards)
@@ -32,33 +34,38 @@ def test_search_updates_working_memory_with_ranked_list():
 
 def test_search_no_results_does_not_crash_and_offers_fallback():
     session = new_session()
+    # ملف مكتمل حتى يصل لاستدعاء البحث فعلًا (المدينة غير موجودة → لا نتائج)
     session.state.destination = ["مدينه_غير_موجوده_ابدا"]
+    session.state.interests = ["tag:historical"]
+    session.state.budget_level = "low"
+    session.state.group_type = "solo"
     response = run(dialogue.handle_turn(session, "اقترحلي اماكن حلوه", "u1"))
     assert response.cards is None or response.cards == []
     assert session.memory.last_bot_action == "search_no_results"
 
 
-def test_search_open_exploration_infers_from_profile_instead_of_blocking():
-    """سيناريو 1 (spec.md §5): لا وجهة ولا اهتمامات مذكورة أبدًا — بدل الحجب
-    أو التخمين، نستنتج اهتمامات مبدئية من profile ونعرض نتائج فورًا + سؤال
-    واحد عن الوجهة. يُختبر مباشرة (كـ_handle_unclear) لتفادي عشوائية تصنيف
-    نص مبهم حقًا عبر المصنّف الحقيقي."""
+def test_search_gathers_destination_first_when_nothing_known():
+    """لا معلومات → أول سؤال عن المدينة (اجمع-أولًا)، بلا عرض بطاقات، ويُعلَّق
+    المسار كـ recommend كي تُستأنف الأجوبة المقتضبة."""
     session = new_session()
-    response = run(dialogue._handle_search("بدي سافر بس ما بعرف لوين", session.state, session.memory, "u_demo"))
-    assert response.cards is not None and len(response.cards) > 0
-    assert session.state.interests  # مستنتجة من top_tags وليست مخترعة
-    assert session.memory.search_enrichment_asked is True
-    assert "لوين" in response.reply or "go" in response.reply.lower()
+    response = run(dialogue._handle_search("بدي روح رحلة", session.state, session.memory, "u_demo", False))
+    assert response.cards is None
+    assert session.memory.last_bot_action == "asked_missing_info"
+    assert session.memory.pending_intent == "recommend"
 
 
-def test_search_asks_group_type_enrichment_once_then_not_again():
+def test_search_gathers_four_fields_in_order_then_recommends():
+    """يجمع المدينة → التصنيفات → الميزانية → المجموعة (سؤال واحد بالدور) ثم يوصّي."""
     session = new_session()
-    r1 = run(dialogue.handle_turn(session, "اقترحلي مطاعم بحلب", "u1"))
-    assert "مع العيلة" in r1.reply
-    assert session.memory.search_enrichment_asked is True
-
-    r2 = run(dialogue.handle_turn(session, "بدي اماكن تانيه بحلب", "u1"))
-    assert "مع العيلة" not in r2.reply
+    r1 = run(dialogue.handle_turn(session, "بدي روح ع حلب", "u1"))   # المدينة موجودة → يسأل التصنيف
+    assert r1.cards is None and ("نوع الأماكن" in r1.reply)
+    r2 = run(dialogue.handle_turn(session, "تاريخيه", "u1"))          # → يسأل الميزانية
+    assert r2.cards is None and ("ميزانيتك" in r2.reply)
+    r3 = run(dialogue.handle_turn(session, "اقتصادي", "u1"))          # → يسأل المجموعة
+    assert r3.cards is None and r3.reply
+    r4 = run(dialogue.handle_turn(session, "مع عيلتي", "u1"))         # اكتمل → بطاقات
+    assert r4.cards is not None and len(r4.cards) > 0
+    assert session.memory.pending_intent is None
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +161,10 @@ def test_build_plan_missing_info_asks_single_question_about_destination():
 
 def test_build_plan_complete_info_in_one_message_builds_plan():
     session = new_session()
-    response = run(dialogue.handle_turn(session, "بدي خطة رحلة 3 ايام مع العيلة بدمشق", "u1"))
+    # ملف الخطة الكامل بجملة واحدة: مدينة + تصنيف + ميزانية + مجموعة + مدة
+    response = run(
+        dialogue.handle_turn(session, "رتبلي خطة 3 ايام بدمشق لعيلتي اماكن تاريخيه رخيصه", "u1")
+    )
     assert session.memory.last_bot_action == "showed_plan"
     assert session.memory.current_plan is not None
     assert response.plan is not None
@@ -162,22 +172,22 @@ def test_build_plan_complete_info_in_one_message_builds_plan():
 
 
 def test_build_plan_forces_call_with_defaults_after_two_missed_questions():
-    """استراتيجية السؤال، القاعدة 8: الحد الأقصى 3 أسئلة متتالية — بعد سؤالين
-    بلا إجابة مفيدة، يُستدعى planner.build بقيم افتراضية بدل الاستمرار بالسؤال."""
+    """سقف التهرّب: بعد دورين بلا تقدّم فعلي، يُستدعى planner.build بقيم افتراضية
+    بدل الاستمرار بالسؤال (طلب المالك: نتابع بما توفّر ونصرّح بذلك)."""
     session = new_session()
 
     r1 = run(dialogue.handle_turn(session, "اعمل خطة سياحية شاملة", "u1"))
-    assert session.memory.build_plan_asks == 1
+    assert session.memory.gather_asks == 1
     assert r1.plan is None
 
     r2 = run(dialogue.handle_turn(session, "خطط لي رحلة", "u1"))
-    assert session.memory.build_plan_asks == 2
+    assert session.memory.gather_asks == 2
     assert r2.plan is None
 
     r3 = run(dialogue.handle_turn(session, "رتب لي رحلة سياحية", "u1"))
     assert r3.plan is not None
     assert session.memory.last_bot_action == "showed_plan_with_defaults"
-    assert session.memory.build_plan_asks == 0
+    assert session.memory.gather_asks == 0
     assert session.state.destination and session.state.duration_days and session.state.group_type
 
 

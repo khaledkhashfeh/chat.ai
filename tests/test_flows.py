@@ -54,8 +54,8 @@ def test_full_context_flow_search_details_add_build_modify():
     modify(remove) جراحي. يغطي أهم سيناريو تسلسل سياق بـ docs/plan.md المخطط 3."""
     sid = "flow-context-1"
 
-    # 1) بحث فوري
-    r1 = send(sid, "اقترحلي أماكن تاريخيه بدمشق")
+    # 1) بحث بملف مكتمل (مدينة+تصنيف+ميزانية+مجموعة) → بطاقات فورًا
+    r1 = send(sid, "اقترحلي أماكن تاريخيه بدمشق لعيلتي واقتصادي")
     assert r1["cards"] and len(r1["cards"]) >= 2
     session1 = _session_store.load(sid)
     assert session1.memory.last_bot_action == "showed_recommendations"
@@ -83,7 +83,8 @@ def test_full_context_flow_search_details_add_build_modify():
     assert first_place_id in session4.state.saved_place_ids
     assert {first_place_id, second_place_id} <= set(session4.state.saved_place_ids)
 
-    # 5) بناء خطة بالمحفوظات — سؤال واحد فقط إن نقصت معلومة، ثم بناء فعلي
+    # 5) بناء خطة بالمحفوظات — التصنيف/الميزانية/المجموعة موروثة من البحث،
+    # وبقيت المدة فقط → تُبنى مباشرةً عند ذكرها
     r5 = send(sid, "رتبلي خطة يومين مع عيلتي")
     assert r5["plan"] is not None, r5["reply"]
     assert len(r5["plan"]["days"]) == 2
@@ -111,7 +112,7 @@ def test_details_only_flow_never_triggers_planning():
     """سيناريو 3 بـ spec.md §5: سؤال تفاصيل صرف لا يفتح أسئلة التخطيط أبدًا."""
     sid = "flow-details-only"
 
-    r1 = send(sid, "اقترحلي متاحف بدمشق")
+    r1 = send(sid, "اقترحلي متاحف بدمشق لعيلتي واقتصادي")
     assert r1["cards"]
 
     r2 = send(sid, "شو اوقات دوام المتحف الوطني؟")
@@ -128,7 +129,7 @@ def test_reject_flow_excludes_shown_places_from_next_search():
     """سيناريو 8: رفض → تشخيص → استبعاد المعروضات من أي بحث لاحق."""
     sid = "flow-reject"
 
-    r1 = send(sid, "اقترحلي أماكن تاريخيه بدمشق")
+    r1 = send(sid, "اقترحلي أماكن تاريخيه بدمشق لعيلتي واقتصادي")
     shown_ids = {c["place_id"] for c in r1["cards"]}
 
     r2 = send(sid, "ما عجبوني")
@@ -142,33 +143,36 @@ def test_reject_flow_excludes_shown_places_from_next_search():
 
 
 def test_multi_turn_plan_gathering_with_short_answers():
-    """جمع معلومات الخطة عبر أدوار بأجوبة مقتضبة ("لحلب"، "تلات ايام"، "مع عيلتي")
-    التي تُصنَّف unclear منفردةً — يجب أن تُستأنف مسار build_plan لا أن تكسر السياق،
-    وتُبنى الخطة عند اكتمال الإلزاميات. (طلب المالك: "لازم ترجع تسأل عن البقية")."""
+    """جمع الخطة الكامل عبر أدوار بأجوبة مقتضبة (مدينة → تصنيف → ميزانية →
+    مجموعة → مدة) — كل جواب يُستأنف المسار لا يكسره، وتُبنى الخطة عند الاكتمال.
+    (طلب المالك: "لازم ترجع تسأل عن البقية")."""
     sid = "flow-multiturn-plan"
 
     r1 = send(sid, "بدي اعمل رحلة")
-    assert r1["plan"] is None
-    assert r1["reply"]  # سؤال عن الوجهة
+    assert r1["plan"] is None and r1["reply"]  # سؤال عن الوجهة
 
-    r2 = send(sid, "لحلب")  # جواب مقتضب — يجب أن يُستأنف الجمع لا أن يضيع
+    r2 = send(sid, "لحلب")  # جواب مقتضب — يُستأنف الجمع لا يضيع
     assert r2["plan"] is None
     s2 = _session_store.load(sid)
     assert s2.state.destination == ["حلب"]
     assert s2.memory.pending_intent == "build_plan"
 
-    r3 = send(sid, "تلات ايام")
+    r3 = send(sid, "تاريخيه")   # التصنيف
     assert r3["plan"] is None
-    s3 = _session_store.load(sid)
-    assert s3.state.duration_days == 3
+    r4 = send(sid, "متوسط")      # الميزانية
+    assert r4["plan"] is None
+    r5 = send(sid, "مع عيلتي")   # المجموعة
+    assert r5["plan"] is None
 
-    r4 = send(sid, "مع عيلتي")  # آخر ناقص → تُبنى الخطة الآن
-    assert r4["plan"] is not None, r4["reply"]
-    assert len(r4["plan"]["days"]) == 3
-    s4 = _session_store.load(sid)
-    assert s4.state.group_type == "family"
-    assert s4.memory.pending_intent is None
-    assert s4.memory.last_bot_action == "showed_plan"
+    r6 = send(sid, "تلات ايام")  # آخر ناقص (المدة) → تُبنى الخطة الآن
+    assert r6["plan"] is not None, r6["reply"]
+    assert len(r6["plan"]["days"]) == 3
+    s6 = _session_store.load(sid)
+    assert s6.state.group_type == "family"
+    assert s6.state.budget_level == "medium"
+    assert "tag:historical" in s6.state.interests
+    assert s6.memory.pending_intent is None
+    assert s6.memory.last_bot_action == "showed_plan"
 
 
 def test_language_follows_last_message_within_same_session():
