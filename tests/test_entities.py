@@ -94,3 +94,27 @@ def test_mixed_language_message():
     assert result["destination"] == ["حلب"]
     assert result["group_type"] == "family"
     assert result["duration_days"] == 4
+
+
+def test_occasion_honeymoon_maps_to_couple_group_no_new_field():
+    # المناسبات الخاصة تُطوى على group_type الموجود (docs/spec.md §3-[4]) — لا حقل occasion منفصل
+    assert norm_extract("بدنا نعمل شهر عسل") == {"group_type": "couple"}
+
+
+def test_occasion_anniversary_english_maps_to_couple_group():
+    assert norm_extract("we want a trip for our anniversary") == {"group_type": "couple"}
+
+
+def test_occasion_graduation_trip_maps_to_friends_group():
+    assert norm_extract("بدنا رحلة تخرج") == {"group_type": "friends"}
+
+
+def test_climate_escape_heat_maps_to_nature_tag_no_new_tag():
+    # الهروب من الطقس يُطوى على tag:nature/tag:sea الموجودين (docs/spec.md §3-[4]) — لا وسم جديد
+    result = norm_extract("هربان من الحر بدي جو بارد")
+    assert result["interests"] == ["tag:nature"]
+
+
+def test_climate_warm_sun_maps_to_sea_tag():
+    result = norm_extract("بدي دفا وشمس")
+    assert result["interests"] == ["tag:sea"]

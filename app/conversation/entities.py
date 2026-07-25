@@ -29,8 +29,14 @@ CITIES: dict[str, list[str]] = {
 
 GROUPS: dict[str, list[str]] = {
     "family": ["عيله", "عيلت", "عائله", "عائلت", "اطفال", "ولاد", "طفل", "family", "kids"],
-    "friends": ["اصحاب", "شباب", "رفقات", "صحابي", "friends"],
-    "couple": ["زوجتي", "خطيبتي", "مرتي", "جوزي", "خطيبي", "زوجي", "wife", "husband", "couple", "honeymoon"],
+    "friends": [
+        "اصحاب", "شباب", "رفقات", "صحابي", "friends",
+        "رحله تخرج", "رحله التخرج", "تخرج", "graduation trip", "graduation",
+    ],
+    "couple": [
+        "زوجتي", "خطيبتي", "مرتي", "جوزي", "خطيبي", "زوجي", "wife", "husband", "couple", "honeymoon",
+        "شهر عسل", "شهر العسل", "ذكرى زواج", "ذكرى الزواج", "anniversary",
+    ],
     "solo": ["لحالي", "وحدي", "solo", "alone"],
     "large_group": ["رحله جماعيه", "مجموعه كبيره", "large group", "group trip"],
 }
@@ -54,6 +60,13 @@ INTEREST_TAGS: dict[str, str] = {
     "مغامرات": "tag:adventure", "مغامره": "tag:adventure", "adventure": "tag:adventure",
     "هادئه": "tag:quiet", "هادئ": "tag:quiet", "هدوء": "tag:quiet", "quiet": "tag:quiet",
     "متاحف": "tag:museum", "متحف": "tag:museum", "museum": "tag:museum",
+    # هروب من الطقس: يُطوى على الوسمين الموجودين، لا وسم جديد (tag:nature=بارد/جبلي،
+    # tag:sea=دافئ/شاطئي) — القرار موثّق بـ docs/spec.md §3-[4].
+    "هروب من الحر": "tag:nature", "هربان من الحر": "tag:nature", "بعيد عن الحر": "tag:nature",
+    "جو بارد": "tag:nature", "طقس بارد": "tag:nature", "مكان بارد": "tag:nature",
+    "escape the heat": "tag:nature", "cool weather": "tag:nature", "cold weather": "tag:nature",
+    "دافئ": "tag:sea", "دفا": "tag:sea", "شمس": "tag:sea",
+    "warm weather": "tag:sea", "sunny": "tag:sea",
 }
 
 _DURATION_NUM_PATTERN = re.compile(r"(\d+)\s*(?:يوم|ايام|day|days)")
