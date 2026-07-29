@@ -10,6 +10,7 @@ app.conversation.responses (respond وأخواتها).
 from __future__ import annotations
 
 import re
+from datetime import date, timedelta
 from typing import Optional
 
 from app.conversation import entities as entities_mod
@@ -27,9 +28,9 @@ from app.mocks.data import get_place
 from app.shared.models import (
     ChatResponse,
     ConversationState,
+    DateRange,
     ErrorObject,
     Modification,
-    RecommendedPlaceRef,
     WorkingMemory,
 )
 
@@ -50,6 +51,72 @@ _MODIFY_ACTION_ORDER = [
 ]
 
 _DAY_NUMBER_PATTERN = re.compile(r"(?:يوم|day)\D{0,4}(\d)")
+
+# ---------------------------------------------------------------------------
+# تعديل المعلومات المجموعة (لا الخطة) — إضافة/إزالة وجهة أو اهتمام، وإعادة
+# بدء الجمع من الصفر بتأكيد صريح قبل أي مسح (إجراء غير قابل للتراجع، spec.md §2.2).
+# الإضافة تعمل أصلًا عبر الاستخراج العادي (ذِكر مدينة = تُضاف تراكميًا)؛ الجديد
+# هنا هو الإزالة الصريحة والمسح الكامل بتأكيد.
+# ---------------------------------------------------------------------------
+
+_REMOVE_VERBS = ("شيل", "احذف", "الغي", "الغى", "بلاش", "remove", "cancel", "delete")
+_RESET_TRIGGER_WORDS = (
+    "خطه جديده", "خطة جديدة", "ابلش من جديد", "ابدا من جديد", "ابدأ من جديد",
+    "امسح كل شي", "ابدا من الصفر", "خطه من الصفر", "start over", "new plan", "start fresh",
+)
+_CONFIRM_YES_WORDS = ("ايوا", "ايه", "اكيد", "تمام", "نعم", "yes", "sure", "confirm", "yeah", "yep", "ok")
+_CONFIRM_NO_WORDS = ("لا", "لأ", "ما بدي", "بلاش", "خليها", "no", "cancel", "نو")
+
+
+_PLAN_REFERENCE_WORDS = ("الخطه", "خطتي", "من الخطه", "plan")
+
+
+def _find_removal_target(text_norm: str, state: ConversationState) -> Optional[tuple[str, str]]:
+    """يفحص إن كانت الرسالة تطلب إزالة مدينة أو اهتمام **موجود فعليًا بالحالة**
+    (لا أي مدينة مذكورة) — بفحص قرب فعل إزالة (شيل/الغي..) من اسمها (نافذة
+    ~12 محرفًا، نفس أسلوب كشف النفي بـ context_extractor.py). يرجع أول مطابقة
+    (الحقل، القيمة) أو None. هذا ما يمنع «شيل دمشق وضيف حلب» من إزالة حلب سهوًا:
+    الفعل يجب أن يسبق اسم المدينة الصحيح تحديدًا ضمن نافذة قصيرة.
+
+    استثناء مقصود: رسالة تذكر «الخطة» صراحة («شيل قلعة دمشق من الخطة») تعني
+    التعديل على خطة **قائمة فعلًا** (modify_plan، اسم المكان لا المدينة نفسها
+    قد يتداخل نصيًا مع اسم مدينة بالحالة) — نتنحّى ونترك التصنيف الطبيعي يتولاها."""
+    if any(w in text_norm for w in _PLAN_REFERENCE_WORDS):
+        return None
+    for city in state.destination:
+        for kw in entities_mod.CITIES.get(city, [city]):
+            idx = text_norm.find(kw)
+            if idx == -1:
+                continue
+            window = text_norm[max(0, idx - 12):idx]
+            if any(v in window for v in _REMOVE_VERBS):
+                return ("destination", city)
+    for tag in state.interests:
+        for keyword, mapped_tag in entities_mod.INTEREST_TAGS.items():
+            if mapped_tag != tag:
+                continue
+            idx = text_norm.find(keyword)
+            if idx == -1:
+                continue
+            window = text_norm[max(0, idx - 12):idx]
+            if any(v in window for v in _REMOVE_VERBS):
+                return ("interests", tag)
+    return None
+
+
+def _reset_conversation_state(state: ConversationState) -> None:
+    """يعيد كل حقول الحالة لقيمها الافتراضية عدا اللغة (تبقى بلغة آخر رسالة).
+    يعدّل state بالمكان (mutation) لا يستبدل الكائن — session.state يبقى نفس المرجع."""
+    fresh = ConversationState(language=state.language)
+    for field in ConversationState.model_fields:
+        setattr(state, field, getattr(fresh, field))
+
+
+def _reset_working_memory(memory: WorkingMemory) -> None:
+    """نفس مبدأ _reset_conversation_state — تعديل بالمكان لا استبدال الكائن."""
+    fresh = WorkingMemory()
+    for field in WorkingMemory.model_fields:
+        setattr(memory, field, getattr(fresh, field))
 
 
 def _detect_modify_action(text_norm: str) -> Optional[str]:
@@ -85,10 +152,53 @@ async def handle_turn(session: SessionData, raw_text: str, user_id: str) -> Chat
     # [4] استخراج الكيانات → تحديث الحالة (تراكمي — قاعدة الوراثة، لا يُنسى)
     found = entities_mod.extract_entities(text)
     for field, value in found.items():
-        if field == "interests":
-            state.interests = list(dict.fromkeys([*state.interests, *value]))
+        if field in ("interests", "destination"):
+            # تراكمي لا استبدال — «دمشق» ثم «وحلب كمان» = وجهتان معًا (قاعدة الوراثة)
+            accumulated = getattr(state, field)
+            setattr(state, field, list(dict.fromkeys([*accumulated, *value])))
         else:
             setattr(state, field, value)
+
+    # تاريخ بدء الرحلة — اختياري تمامًا (لا يُسأل عنه أبدًا، يُستخرج فقط إن ذُكر
+    # صراحة، نسبيًا أو صريحًا). نحدّث dates كاملًا (start+end) بمجرد معرفة البداية،
+    # ونعيد حساب النهاية تلقائيًا إن تغيّرت المدة لاحقًا (state.duration_days موروث).
+    start_date = entities_mod.find_start_date(text)
+    if start_date or (found.get("duration_days") and state.dates):
+        anchor = start_date or date.fromisoformat(state.dates.start)
+        end = anchor + timedelta(days=(state.duration_days or 1) - 1)
+        state.dates = DateRange(start=anchor.isoformat(), end=end.isoformat())
+
+    # تأكيد إجراء مدمِّر معلَّق من الدور السابق (حاليًا: إعادة البدء) — يُفحص أولًا
+    # ويُنهي الدور فورًا؛ لا ننفّذ مسحًا بلا تأكيد صريح (spec.md §2.2 الصراحة).
+    if memory.pending_confirmation == "reset_plan":
+        memory.pending_confirmation = None
+        if any(w in text for w in _CONFIRM_YES_WORDS) and not any(w in text for w in _CONFIRM_NO_WORDS):
+            _reset_conversation_state(state)
+            state.language = language  # التصفير أعاد اللغة الحالية أصلًا، لكن تصريحًا لا ضرر
+            _reset_working_memory(memory)
+            memory.last_bot_action = "reset_confirmed"
+            question = responses.gather_question_for("trip_purpose", language)
+            return responses.respond("reset_confirmed", language, state=state, question=question)
+        memory.last_bot_action = "reset_declined"
+        return responses.respond("reset_declined", language, state=state)
+
+    # إعادة بدء الجمع من الصفر — لا تُنفَّذ مباشرة (إجراء غير قابل للتراجع)،
+    # بل تُطرح كسؤال تأكيد أولًا.
+    if any(w in text for w in _RESET_TRIGGER_WORDS):
+        memory.pending_confirmation = "reset_plan"
+        memory.last_bot_action = "asked_reset_confirmation"
+        return responses.respond("confirm_reset", language, state=state)
+
+    # إزالة صريحة لوجهة أو اهتمام مذكورين سابقًا («شيل دمشق»، «الغي التاريخي») —
+    # يُفحص قبل أي شي آخر لأن الاستخراج العادي أعلاه قد يكون "أضاف" المدينة
+    # ذاتها للتو (ذِكرها بالنص لا يميّز وحده بين إضافة وإزالة؛ الفعل المرافق يميّز).
+    removal = _find_removal_target(text, state)
+    if removal:
+        field, value = removal
+        setattr(state, field, [v for v in getattr(state, field) if v != value])
+        memory.last_bot_action = f"removed_{field}"
+        label = value if field == "destination" else responses.tag_display_label(value, language)
+        return responses.respond("removed_value", language, state=state, value=label)
 
     # هل قدّم المستخدم بهذا الدور حقلًا قابلًا للجمع؟ (لتصفير عدّاد التهرّب)
     made_progress = any(f in found for f in _GATHERABLE_FIELDS)
@@ -100,16 +210,34 @@ async def handle_turn(session: SessionData, raw_text: str, user_id: str) -> Chat
         if intent_label in ("unclear", "search"):
             intent_label = "search"
         else:
-            memory.pending_intent = None  # نية مختلفة (حتى build_plan) → بدّل المسار
+            # نية مختلفة (حتى build_plan) → بدّل المسار فعلًا؛ نصفّر last_asked_field
+            # كي لا يُخطئ سؤال مستقبلي (بمسار جديد) فيظنّ نفسه إعادة سؤال لم يُفهَم.
+            memory.pending_intent = None
+            memory.last_asked_field = None
     elif memory.pending_intent == "build_plan":
         if intent_label in ("unclear", "search", "build_plan"):
             intent_label = "build_plan"
         else:
             memory.pending_intent = None
+            memory.last_asked_field = None
+
+    # سياج أمان (لا علاقة له بجلسة معلَّقة): المصنّف له ثغرات حتمية بصيغ لم
+    # يتدرّب عليها (مثلًا "أريد الذهاب لدمشق" الفصحى مقابل "بدي روح ع دمشق"
+    # العامية بالتدريب) فيرجع unclear رغم أن استخراج الكيانات نجح فعليًا. بدل
+    # إهدار وجهة/اهتمام استُخرج هذا الدور بردّ عام لا يستخدمه، نعامل الرسالة
+    # كبداية توصية — الفعل الافتراضي الأكثر أمانًا بمجال تطبيق سياحي بحت.
+    # نتحقق من `found` (هذا الدور تحديدًا) لا `state` المتراكمة كي لا نخطف رسالة
+    # غامضة لاحقة لا علاقة لها بالسفر لمجرد أن وجهة قديمة ما زالت بالحالة.
+    # trip_purpose مضاف هنا أيضًا: جواب مقتضب على سؤاله ("بدي استجمام") غالبًا
+    # يُصنَّف unclear بمفرده — يجب أن يُفهَم كبداية توصية لا رسالة غامضة عامة.
+    elif intent_label == "unclear" and (
+        found.get("destination") or found.get("interests") or found.get("trip_purpose")
+    ):
+        intent_label = "search"
 
     # [5] القرار (دليل قرار الاستدعاء — spec.md §4)
     if intent_label == "search":
-        response = await _handle_search(text, state, memory, user_id, made_progress)
+        response = await _handle_search(state, memory, made_progress)
     elif intent_label == "details":
         response = await _handle_details(text, ref, state, memory)
     elif intent_label == "compare":
@@ -138,9 +266,11 @@ async def handle_turn(session: SessionData, raw_text: str, user_id: str) -> Chat
 # دور بترتيب الأولوية، مع استئناف الأجوبة المقتضبة (pending_intent) وسقف تهرّب.
 # ---------------------------------------------------------------------------
 
-# ترتيب أولوية الجمع (المدينة → التصنيفات → الميزانية → المجموعة [→ المدة للخطة])
-_GATHER_FOR_RECOMMEND = ("destination", "interests", "budget_level", "group_type")
-_GATHER_FOR_PLAN = ("destination", "interests", "budget_level", "group_type", "duration_days")
+# ترتيب أولوية الجمع (الهدف → المدينة → التصنيفات → الميزانية → المجموعة [→ المدة للخطة])
+# trip_purpose أولوية قصوى (docs/contract.md §1.1) — حقل جمع إلزامي دائمًا، مستقل
+# عن group_type/interests (يصف دافع الرحلة لا تركيبتها ولا نوع أماكنها).
+_GATHER_FOR_RECOMMEND = ("trip_purpose", "destination", "interests", "budget_level", "group_type")
+_GATHER_FOR_PLAN = ("trip_purpose", "destination", "interests", "budget_level", "group_type", "duration_days")
 _GATHERABLE_FIELDS = _GATHER_FOR_PLAN  # المجموعة الأشمل (لكشف التقدّم)
 _MAX_GATHER_ASKS = 2  # بعد تهرّبين متتاليين نتابع بما توفّر
 
@@ -169,49 +299,58 @@ def _gather_step(
     if _first_missing_gather(state, fields) is None:
         memory.gather_asks = 0
         memory.pending_intent = None
+        memory.last_asked_field = None
         return None
     if made_progress:
         memory.gather_asks = 0  # المستخدم تقدّم فعليًا → ليس تهرّبًا
     if memory.gather_asks >= _MAX_GATHER_ASKS:
-        memory.pending_intent = None  # نتابع بما توفّر (يُصرَّح بذلك في الرد)
+        # نتابع بما توفّر (يُصرَّح بذلك بالرد) — نصفّر العدّاد فورًا (لا ننتظر
+        # استدعاء أداة لاحقًا لتصفيره؛ هذه الطبقة لم تعد تستدعي أدوات هنا أصلًا)
+        # كي لا يبقى عالقًا عند حدّه الأقصى لأي جمع مستقبلي.
+        memory.gather_asks = 0
+        memory.pending_intent = None
+        memory.last_asked_field = None
         return None
     memory.gather_asks += 1
     memory.pending_intent = pending_tag
     memory.last_bot_action = "asked_missing_info"
     field = _first_missing_gather(state, fields)
     question = responses.gather_question_for(field, state.language)
-    return responses.respond("ask", state.language, state=state, question=question)
+    # نفس الحقل يُعاد سؤاله ولم يقدّم المستخدم أي معلومة جديدة هذا الدور → جوابه
+    # لم يُفهَم فعلًا (لا مجرد إجابة حقل آخر بترتيب مختلف) — نصرّح بذلك صراحة
+    # بدل تكرار نفس السؤال حرفيًا بصمت (طلب المالك: "يعيد السؤال ان لم يفهم").
+    repeated_unresolved = field == memory.last_asked_field and not made_progress
+    memory.last_asked_field = field
+    template = "ask_again" if repeated_unresolved else "ask"
+    return responses.respond(template, state.language, state=state, question=question)
 
 
 # ---------------------------------------------------------------------------
-# search — اجمع (مدينة + تصنيفات + ميزانية + مجموعة) ثم استدعِ التوصية
+# search — اجمع (مدينة + تصنيفات + ميزانية + مجموعة) ثم **توقّف**.
+#
+# قرار المالك الصريح: عرض الأماكن ليس شغل هذه الطبقة — بمجرد اكتمال الجمع
+# تؤكّد الطبقة الجاهزية فقط، بلا استدعاء recommender.search ولا بطاقات. الحالة
+# المتراكمة (ConversationState) هي بالضبط ما "سيُرسَل" لطبقة التوصية لاحقًا —
+# تُعرض بقسم منفصل بواجهة الاختبار (غير مرتبط فعليًا بعد)، لا داخل رد الشات.
 # ---------------------------------------------------------------------------
+
+_TARGET_WORD = {"recommend": ("طلبك", "your request"), "build_plan": ("رحلتك", "your trip")}
 
 
 async def _handle_search(
-    text: str, state: ConversationState, memory: WorkingMemory, user_id: str, made_progress: bool = False
+    state: ConversationState, memory: WorkingMemory, made_progress: bool = False
 ) -> ChatResponse:
     lang = state.language
 
     ask = _gather_step(state, memory, _GATHER_FOR_RECOMMEND, made_progress, "recommend")
     if ask is not None:
         return ask
+
     proceeded_partial = _first_missing_gather(state, _GATHER_FOR_RECOMMEND) is not None
-
-    result = await recommender.search(query=text, state=state, top_k=8)
-
-    if not result.results:
-        memory.last_bot_action = "search_no_results"
-        reason = result.fallback.reason if result.fallback else ""
-        return responses.respond("no_results", lang, state=state, reason=reason)
-
-    memory.last_recommendations = [
-        RecommendedPlaceRef(pos=i + 1, place_id=c.place_id, name_ar=c.name_ar, name_en=c.name_en)
-        for i, c in enumerate(result.results)
-    ]
-    memory.last_bot_action = "showed_recommendations"
-    key = "show_places_partial" if proceeded_partial else "show_places"
-    return responses.respond(key, lang, state=state, cards=result.results, n=len(result.results))
+    target = _TARGET_WORD["recommend"][0 if lang == "ar" else 1]
+    memory.last_bot_action = "gathered_info_partial" if proceeded_partial else "gathered_info"
+    key = "gathered_partial" if proceeded_partial else "gathered_ready"
+    return responses.respond(key, lang, state=state, target=target)
 
 
 # ---------------------------------------------------------------------------
@@ -283,12 +422,6 @@ async def _handle_compare(text: str, ref: dict, state: ConversationState, memory
 # ---------------------------------------------------------------------------
 
 
-# قيم افتراضية للحد الأدنى الصلب الذي تحتاجه أداة البناء (لا اختراع أماكن — بارامترات رحلة فقط)
-_DEFAULT_DESTINATION = "دمشق"
-_DEFAULT_DURATION_DAYS = 2
-_DEFAULT_GROUP_TYPE = "solo"
-
-
 async def _handle_build_plan(
     state: ConversationState, memory: WorkingMemory, made_progress: bool = False
 ) -> ChatResponse:
@@ -297,41 +430,12 @@ async def _handle_build_plan(
     ask = _gather_step(state, memory, _GATHER_FOR_PLAN, made_progress, "build_plan")
     if ask is not None:
         return ask
-    used_defaults = _first_missing_gather(state, _GATHER_FOR_PLAN) is not None
 
-    # ضمان الحد الأدنى الصلب لأداة البناء عند التهرّب (dest+duration+group)
-    if not state.destination:
-        state.destination = [_DEFAULT_DESTINATION]
-    if not state.duration_days:
-        state.duration_days = _DEFAULT_DURATION_DAYS
-    if not state.group_type:
-        state.group_type = _DEFAULT_GROUP_TYPE
-
-    if state.saved_place_ids:
-        # المستخدم اختار أماكنه بنفسه → feasibility أولًا (spec.md §4)
-        feas = await planner.feasibility(
-            place_ids=state.saved_place_ids, duration_days=state.duration_days, group_type=state.group_type
-        )
-        if feas.verdict == "unrealistic":
-            memory.last_bot_action = "feasibility_warning"
-            return responses.infeasible_reply(feas, lang, state)
-        plan_result = await planner.build(state=state, mandatory_place_ids=state.saved_place_ids)
-    else:
-        plan_result = await planner.build(state=state)
-
-    if isinstance(plan_result, ErrorObject):
-        return responses.respond("tool_error", lang, state=state, message=plan_result.error.user_message)
-
-    memory.current_plan = plan_result
-    state.current_plan_id = plan_result.plan_id
-    memory.gather_asks = 0
-    memory.pending_intent = None  # انتهى جمع الخطة
-    summary = plan_result.summary_ar if lang == "ar" else plan_result.summary_en
-    if used_defaults:
-        memory.last_bot_action = "showed_plan_with_defaults"
-        return responses.respond("plan_ready_defaults", lang, state=state, plan=plan_result, summary=summary)
-    memory.last_bot_action = "showed_plan"
-    return responses.respond("plan_ready", lang, state=state, plan=plan_result, summary=summary)
+    proceeded_partial = _first_missing_gather(state, _GATHER_FOR_PLAN) is not None
+    target = _TARGET_WORD["build_plan"][0 if lang == "ar" else 1]
+    memory.last_bot_action = "gathered_info_partial" if proceeded_partial else "gathered_info"
+    key = "gathered_partial" if proceeded_partial else "gathered_ready"
+    return responses.respond(key, lang, state=state, target=target)
 
 
 # ---------------------------------------------------------------------------

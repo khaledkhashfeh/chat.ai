@@ -1,13 +1,26 @@
 """tests/test_context_extractor.py — عقد conversation_context_v1 (طبقة المحادثة → Laravel).
 
-يغطّي: تحويل النوايا 9→6، بناء القيود (محافظة/مدينة/فئة/ميزانية)، التفضيلات
-الموزونة، سياق الرحلة، الاستبعادات والنفي، تنظيف query_text، ومنطق نقص المعلومات
-+ سؤال التوضيح. المثالان الحرفيان من مواصفة المالك يُختبران كحالتَي قبول.
+يغطّي: تحويل النوايا 9→6، بناء القيود (محافظة/مدينة/ميزانية)، الوسوم المصنَّفة
+{tag, tag_type, weight}، سياق الرحلة، الاستبعادات والنفي، تنظيف query_text،
+ومنطق نقص المعلومات + سؤال التوضيح. المثالان الحرفيان من مواصفة المالك يُختبران
+كحالتَي قبول.
 """
 from app.conversation import context_extractor as ctx_mod
 from app.conversation.context_extractor import extract_context
 from app.conversation.normalizer import normalize
-from app.shared.models import ContextFilters
+from app.shared.models import ContextFilters, ContextTag
+
+
+def tag_weight(tags: list[ContextTag], tag_type: str, tag: str | None = None):
+    """يرجع وزن أول وسم مطابق tag_type (واختياريًا tag) أو None إن لم يوجد."""
+    for t in tags:
+        if t.tag_type == tag_type and (tag is None or t.tag == tag):
+            return t.weight
+    return None
+
+
+def has_tag(tags: list[ContextTag], tag_type: str, tag: str) -> bool:
+    return any(t.tag_type == tag_type and t.tag == tag for t in tags)
 
 
 # ---------------------------------------------------------------------------
@@ -58,10 +71,11 @@ def test_town_maps_to_governorate_and_city():
     assert ctx.filters.city == "Bosra"
 
 
-def test_category_from_first_type_tag():
-    assert extract_context("اقترحلي اماكن تاريخيه بحلب").filters.category == "Historical"
-    assert extract_context("بدي مطاعم بحلب").filters.category == "Food"
-    assert extract_context("بدي متاحف بدمشق").filters.category == "Museum"
+def test_interest_tags_produce_typed_tags_not_flat_category():
+    """قرار المالك: لا filters.category — الوسوم تُخرَج بصيغة {tag, tag_type} صريحة."""
+    assert has_tag(extract_context("اقترحلي اماكن تاريخيه بحلب").tags, "heritage", "تاريخي")
+    assert has_tag(extract_context("بدي مطاعم بحلب").tags, "food", "طعام")
+    assert has_tag(extract_context("بدي متاحف بدمشق").tags, "heritage", "متحف")
 
 
 def test_budget_tier_detected_from_text():
@@ -76,29 +90,30 @@ def test_no_signals_leaves_filters_empty():
 
 
 # ---------------------------------------------------------------------------
-# التفضيلات الموزونة (preferences)
+# الوسوم المصنَّفة {tag, tag_type, weight} — تحل محل preferences+category القديمين
 # ---------------------------------------------------------------------------
 
 
-def test_preferences_weighted_from_tags_and_group():
-    prefs = extract_context("اقترحلي اماكن تاريخيه لعيلتي بدمشق").preferences
-    assert prefs["history"] == 1.0
-    assert prefs["family"] == 0.8
+def test_tags_weighted_from_interests_and_group():
+    tags = extract_context("اقترحلي اماكن تاريخيه لعيلتي بدمشق").tags
+    assert tag_weight(tags, "heritage", "تاريخي") == 1.0
+    assert tag_weight(tags, "audience", "عائلي") == 0.8
 
 
-def test_quiet_becomes_negative_crowdedness():
-    prefs = extract_context("بدي مكان هادئ بدمشق").preferences
-    assert prefs["crowdedness"] < 0
+def test_quiet_becomes_positive_vibe_tag():
+    """الوسم يمثّل الآن ما يريده المستخدم مباشرة (لا مفتاح سالب مقابل مثل crowdedness)."""
+    tags = extract_context("بدي مكان هادئ بدمشق").tags
+    assert tag_weight(tags, "vibe", "هادئ") == 0.9
 
 
-def test_photography_keyword_adds_preference():
-    prefs = extract_context("بدي مكان حلو للتصوير بحلب").preferences
-    assert prefs["photography"] == 0.9
+def test_photography_keyword_adds_activity_tag():
+    tags = extract_context("بدي مكان حلو للتصوير بحلب").tags
+    assert tag_weight(tags, "activity", "تصوير") == 0.9
 
 
-def test_couple_group_adds_romantic_preference():
-    prefs = extract_context("بدي مكان مع خطيبتي بدمشق").preferences
-    assert prefs.get("romantic") == 0.8
+def test_couple_group_adds_romantic_vibe_tag():
+    tags = extract_context("بدي مكان مع خطيبتي بدمشق").tags
+    assert tag_weight(tags, "vibe", "رومانسي") == 0.8
 
 
 # ---------------------------------------------------------------------------
@@ -132,9 +147,8 @@ def test_duration_minutes_from_hours():
 
 def test_negated_category_is_excluded_not_positive():
     ctx = extract_context("بدي مكان طبيعي بطرطوس بدون متاحف")
-    assert "Museum" in ctx.exclusions.categories
-    assert ctx.filters.category != "Museum"  # النفي لا يصير فئة إيجابية
-    assert "culture" not in ctx.preferences  # ولا تفضيلًا (متحف→culture)
+    assert "متحف" in ctx.exclusions.categories  # التسمية العربية (تطابق tags الآن)
+    assert not has_tag(ctx.tags, "heritage", "متحف")  # النفي لا يصير وسمًا إيجابيًا
 
 
 def test_accessibility_requirement_detected():
@@ -223,12 +237,11 @@ def test_owner_example_1_full_request():
     assert ctx.contract_version == "conversation_context_v1"
     assert ctx.intent == "recommend_places"
     assert ctx.filters.governorate == "Damascus"
-    assert ctx.filters.category == "Historical"
     assert ctx.filters.budget_tier == "free"
-    assert ctx.preferences["history"] == 1.0
-    assert ctx.preferences["family"] == 0.8
-    assert ctx.preferences["photography"] == 0.9
-    assert ctx.preferences["crowdedness"] < 0
+    assert tag_weight(ctx.tags, "heritage", "تاريخي") == 1.0
+    assert tag_weight(ctx.tags, "audience", "عائلي") == 0.8
+    assert tag_weight(ctx.tags, "activity", "تصوير") == 0.9
+    assert tag_weight(ctx.tags, "vibe", "هادئ") == 0.9
     assert ctx.trip_context.group_type == "family"
     assert ctx.requires_clarification is False
 
@@ -237,7 +250,7 @@ def test_owner_example_2_missing_info():
     ctx = extract_context("أريد مكاناً مناسباً غداً.")
     assert ctx.intent == "recommend_places"
     assert ctx.filters == ContextFilters()
-    assert ctx.preferences == {}
+    assert ctx.tags == []
     assert ctx.requires_clarification is True
     assert set(ctx.missing_information) == {"governorate_or_city", "trip_interests"}
     assert ctx.clarification_question is not None

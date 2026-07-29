@@ -24,6 +24,9 @@
   "group_size": 4,
   "interests": ["tag:historical", "tag:family_fun"],
   "pace": "relaxed",
+  "trip_purpose": "family_fun",
+  "transport_mode": "car",
+  "preferred_time": "morning",
   "excluded_place_ids": ["p03"],
   "saved_place_ids": ["p17", "p42"],
   "current_plan_id": null,
@@ -33,18 +36,26 @@
 
 | الحقل | النوع | إلزامي | القيم |
 |---|---|---|---|
-| destination | list[str] | لا | أسماء مدن بالعربية الموحدة |
-| dates | object/null | لا | start, end بصيغة ISO |
+| destination | list[str] | لا | أسماء مدن بالعربية الموحدة — **واحدة أو أكثر** |
+| dates | object/null | لا | start, end بصيغة ISO. اختياري تمامًا — لا يُسأل عنه |
 | duration_days | int/null | لا | |
 | budget_level | str/null | لا | low / medium / high |
 | group_type | str/null | لا | solo / couple / family / friends / large_group |
 | group_size | int/null | لا | |
-| interests | list[str] | لا | من قاموس الوسوم الموحّد فقط |
+| interests | list[str] | لا | من قاموس الوسوم الموحّد فقط — **واحد أو أكثر** |
 | pace | str/null | لا | relaxed / moderate / intense |
+| trip_purpose | str/null | **نعم** (حقل جمع إلزامي) | leisure / adventure / cultural / family_fun / romantic |
+| transport_mode | str/null | لا | car / public_transport / walking / mixed |
+| preferred_time | str/null | لا | morning / afternoon / evening |
 | excluded_place_ids | list[str] | لا | ممنوع اقتراحها |
 | saved_place_ids | list[str] | لا | |
 | current_plan_id | str/null | لا | |
 | language | str | **نعم** | ar / en |
+
+**ملاحظة `trip_purpose`:** حقل مستقل عن `group_type`/`interests` — يصف **دافع** الرحلة
+لا تركيبة المجموعة ولا نوع الأماكن (شخص وحيد ممكن يطلب `family_fun`، وعائلة
+ممكن تطلب `romantic`). يُسأل عنه دائمًا ضمن ترتيب الجمع (أولوية قصوى) بخيارات
+مغلقة — لا يُستنتَج تلقائيًا من group_type.
 
 **قاموس الوسوم الموحّد (مغلق — إضافة وسم = تعديل هذه الوثيقة):**
 `tag:historical, tag:religious, tag:nature, tag:sea, tag:market, tag:food,

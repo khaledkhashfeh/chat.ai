@@ -13,6 +13,12 @@
 بدي سافر ما بعرف على وين بالضبط ||| search
 i want to travel but i don't know where ||| search
 عندك اقتراحات لاماكن بحريه بطرطوس ||| search
+بدي توصيات ||| search
+عطيني توصيات ||| search
+شو توصياتك ||| search
+بدي توصيات لاماكن حلوه ||| search
+give me some recommendations ||| search
+any recommendations for places to visit ||| search
 شو انصحني زور بحمص ||| search
 بدي اماكن للعيله بحلب ||| search
 وريني اماكن رومانسيه بدمشق ||| search
@@ -72,6 +78,9 @@ what time does it close ||| details
 شو افضل وقت لزيارة __مكان_مشار_اليه__ ||| details
 tell me about __مكان_مشار_اليه__ ||| details
 عطيني تفاصيل اكتر عنه ||| details
+عطيني معلومات عن قلعة حلب ||| details
+بدي معلومات عن الجامع الاموي ||| details
+احكيلي عن قلعة دمشق ||| details
 شو بيميز التالت عن غيره ||| details
 هل يحتاج حجز مسبق ||| details
 what's the phone number for it ||| details

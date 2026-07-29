@@ -32,6 +32,12 @@ GroupType = Literal["solo", "couple", "family", "friends", "large_group"]
 BudgetLevel = Literal["low", "medium", "high"]
 Pace = Literal["relaxed", "moderate", "intense"]
 Language = Literal["ar", "en"]
+# دافع الرحلة — مستقل عن group_type/interests (docs/contract.md §1.1)، حقل جمع إلزامي
+TripPurpose = Literal["leisure", "adventure", "cultural", "family_fun", "romantic"]
+TransportMode = Literal["car", "public_transport", "walking", "mixed"]
+# تسمية مختلفة عمدًا عن PreferredTime أدناه (خاص بعقد /context TripContext، 4 قيم
+# تشمل night) — هذا حقل روتين ConversationState اليومي (docs/contract.md)، 3 قيم فقط.
+RoutineTime = Literal["morning", "afternoon", "evening"]
 
 
 class DateRange(BaseModel):
@@ -50,6 +56,9 @@ class ConversationState(BaseModel):
     group_size: Optional[int] = None
     interests: list[str] = Field(default_factory=list)
     pace: Optional[Pace] = None
+    trip_purpose: Optional[TripPurpose] = None
+    transport_mode: Optional[TransportMode] = None
+    preferred_time: Optional[RoutineTime] = None
     excluded_place_ids: list[str] = Field(default_factory=list)
     saved_place_ids: list[str] = Field(default_factory=list)
     current_plan_id: Optional[str] = None
@@ -374,8 +383,14 @@ class WorkingMemory(BaseModel):
     # gather_asks: أدوار متتالية **بلا تقدّم** أثناء جمع المعلومات (تهرّب) — سقفها يُنهي الجمع بما توفّر.
     # pending_intent: نية جمع معلّقة ("recommend"/"build_plan") كي يُفهَم الجواب
     #   المقتضب ("لحلب"، "مع عيلتي") تكملةً للمسار لا رسالة غامضة جديدة.
+    # last_asked_field: آخر حقل سُئل عنه بالجمع — لو أُعيد سؤاله (لم يُفهم جواب
+    #   المستخدم) نصرّح بذلك بالرد بدل تكرار نفس السؤال حرفيًا بصمت.
+    # pending_confirmation: تأكيد إجراء مدمِّر معلَّق ("reset_plan") — الرسالة
+    #   التالية إما تؤكد (تنفّذ المسح) أو تُلغي (نكمل عادي). لا تنفيذ بلا تأكيد صريح.
     gather_asks: int = 0
     pending_intent: Optional[str] = None
+    last_asked_field: Optional[str] = None
+    pending_confirmation: Optional[str] = None
 
 
 class ChatRequest(BaseModel):
@@ -404,6 +419,9 @@ BudgetTier = Literal["free", "cheap", "medium", "expensive"]
 PreferredTime = Literal["morning", "afternoon", "evening", "night"]
 Season = Literal["spring", "summer", "autumn", "winter"]
 PhysicalDifficulty = Literal["easy", "moderate", "hard"]
+# قاموس تصنيف التاغات بقاعدة بيانات Laravel (place_tags.tag_type) — مغلق، يطابق
+# app/Models/PlaceTag.php حرفيًا. أي نوع جديد = تحديث هذا العقد أولًا.
+PlaceTagType = Literal["vibe", "activity", "nature", "heritage", "food", "timing", "emotion", "audience"]
 
 
 class ContextFilters(BaseModel):
@@ -411,8 +429,17 @@ class ContextFilters(BaseModel):
 
     governorate: Optional[str] = None
     city: Optional[str] = None
-    category: Optional[str] = None
     budget_tier: Optional[BudgetTier] = None
+
+
+class ContextTag(BaseModel):
+    """وسم مصنَّف بنوعه (tag_type) بدل نص مسطّح — ليطابق place_tags مباشرة.
+    weight: قوة/اتجاه الإشارة (موجب = مرغوب، سالب = مرفوض) لا فلتر صارم؛
+    Laravel يقرر عتبة الاعتماد عليه لكل حالة."""
+
+    tag: str
+    tag_type: PlaceTagType
+    weight: float
 
 
 class TripContext(BaseModel):
@@ -452,8 +479,9 @@ class ConversationContextV1(BaseModel):
     language: Language
     query_text: str
     filters: ContextFilters = Field(default_factory=ContextFilters)
-    # مفتاح التفضيل → وزن (موجب يرفع الترتيب، سالب يخفضه مثل crowdedness السالب)
-    preferences: dict[str, float] = Field(default_factory=dict)
+    # وسوم مصنَّفة بالنوع (tag_type) بدل نص/فلات مسطّح — تحل محل category+preferences
+    # القديمين معًا (قرار المالك: "الأفضل يرسل بشكل منظم" بصيغة {tag, tag_type}).
+    tags: list[ContextTag] = Field(default_factory=list)
     trip_context: TripContext = Field(default_factory=TripContext)
     location: ContextLocation = Field(default_factory=ContextLocation)
     exclusions: ContextExclusions = Field(default_factory=ContextExclusions)

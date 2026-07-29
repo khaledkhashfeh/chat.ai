@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مختبر طبقة المحادثة — /chat + /context — منصة السياحة الذكية في سوريا</title>
+<style>
+  :root{
+    --bg:#0b1615;
+    --panel:#0f1f1d;
+    --panel-2:#132c29;
+    --border:#1e3a36;
+    --ink:#eaf3f1;
+    --ink-dim:#9fb8b3;
+    --muted:#6f8f89;
+    --teal:#14b8a6;
+    --teal-dim:#0d8f81;
+    --gold:#d3a24b;
+    --gold-dim:#b8853a;
+    --violet:#8b7cf6;
+    --orange:#e08a4b;
+    --danger:#e5484d;
+    --amber:#e0a83b;
+    --ok:#3ecf8e;
+    --bubble-user:#14453f;
+    --bubble-bot:#16211f;
+    --radius:14px;
+    --shadow:0 8px 24px rgba(0,0,0,.35);
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 100% -10%, rgba(20,184,166,.10), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(139,124,246,.08), transparent 60%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Segoe UI","Tahoma","Cairo",system-ui,-apple-system,sans-serif;
+    display:flex;
+    height:100vh;
+    overflow:hidden;
+  }
+
+  /* ========================================================================
+     تخطيط عام — إصلاح تمرير جوهري:
+     عناصر flex/grid تُبقي حجمها الأدنى = auto (حجم محتواها) افتراضيًا، فإن
+     كبر محتوى #messages عن الشاشة يفيض كامل الصفحة بدل أن يتكفّل #messages
+     وحده بالتمرير الداخلي، وتختفي الردود الأخيرة تحت حافة الشاشة (كانت هذه
+     المشكلة بالنسخة السابقة). الحل: min-height:0 على **كل** حلقة بالمسار من
+     body حتى #messages، فيصير #messages هو الوحيد المسموح له overflow-y:auto.
+     ======================================================================== */
+  /* ثلاث مناطق منفصلة تمامًا: إعدادات (يمين) | محادثة /chat (وسط) | جيسون
+     الإرسال الصادر (شمال) — بطلب صريح: "ليس في نفس مكان الشات". */
+  #app{
+    display:grid;
+    grid-template-columns: 340px 1fr 320px;
+    width:100%;
+    height:100%;
+    min-height:0;
+  }
+  @media (max-width: 1180px){
+    #app{grid-template-columns: 340px 1fr;}
+    #jsonPanel{position:fixed; inset:0 0 0 20%; z-index:40; transform:translateX(-105%); transition:transform .25s ease; border-left:none; border-right:1px solid var(--border);}
+    #jsonPanel.open{transform:translateX(0);}
+    #jsonBackdrop{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:35;}
+    #jsonBackdrop.show{display:block;}
+    #jsonToggleBtn{display:inline-flex !important;}
+  }
+  @media (max-width: 880px){
+    #app{grid-template-columns: 1fr;}
+    #sidebar{position:fixed; inset:0 20% 0 0; z-index:40; transform:translateX(105%); transition:transform .25s ease;}
+    #sidebar.open{transform:translateX(0);}
+    #sidebarBackdrop{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:35;}
+    #sidebarBackdrop.show{display:block;}
+    #menuBtn{display:inline-flex !important;}
+    #jsonPanel{inset:0 20% 0 0;}
+  }
+
+  /* ---------- الشريط الجانبي ---------- */
+  #sidebar{
+    background:linear-gradient(180deg, var(--panel), #0b1a18);
+    border-left:1px solid var(--border);
+    display:flex;
+    flex-direction:column;
+    overflow-y:auto;
+    min-height:0;
+  }
+  .brand{
+    display:flex; align-items:center; gap:10px;
+    padding:18px 16px 14px;
+    border-bottom:1px solid var(--border);
+  }
+  .brand .logo{
+    width:38px; height:38px; border-radius:10px;
+    background:linear-gradient(135deg, var(--teal), var(--violet));
+    display:flex; align-items:center; justify-content:center;
+    font-size:19px; box-shadow:var(--shadow);
+    flex:none;
+  }
+  .brand h1{font-size:14.5px; margin:0; line-height:1.35; font-weight:700;}
+  .brand p{margin:2px 0 0; font-size:11.5px; color:var(--ink-dim);}
+
+  .section{padding:14px 16px; border-bottom:1px solid var(--border);}
+  .section-title{
+    font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+    color:var(--muted); font-weight:700; margin:0 0 10px;
+    display:flex; align-items:center; gap:6px;
+  }
+
+  .field{margin-bottom:10px;}
+  .field label{display:block; font-size:11.5px; color:var(--ink-dim); margin-bottom:5px;}
+  .field .row{display:flex; gap:6px;}
+  input[type=text], input[type=password], select{
+    width:100%; background:var(--panel-2); border:1px solid var(--border);
+    color:var(--ink); border-radius:9px; padding:8px 10px; font-size:12.5px;
+    outline:none; transition:border-color .15s, box-shadow .15s; font-family:inherit;
+    direction:ltr; text-align:left;
+  }
+  select{direction:rtl; text-align:right; cursor:pointer;}
+  input:focus, select:focus{
+    border-color:var(--teal); box-shadow:0 0 0 3px rgba(20,184,166,.15);
+  }
+  .iconbtn{
+    flex:none; width:34px; height:34px; border-radius:9px; border:1px solid var(--border);
+    background:var(--panel-2); color:var(--ink-dim); cursor:pointer; font-size:14px;
+    display:flex; align-items:center; justify-content:center; transition:.15s;
+  }
+  .iconbtn:hover{color:var(--teal); border-color:var(--teal-dim); background:#0f2622;}
+
+  .status-row{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--ink-dim);}
+  .dot{width:8px; height:8px; border-radius:50%; background:var(--muted); flex:none; transition:background .2s;}
+  .dot.ok{background:var(--ok); box-shadow:0 0 8px var(--ok);}
+  .dot.bad{background:var(--danger); box-shadow:0 0 8px var(--danger);}
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    border:1px solid var(--border); background:var(--panel-2); color:var(--ink);
+    border-radius:9px; padding:8px 12px; font-size:12.5px; cursor:pointer;
+    transition:.15s; font-family:inherit; font-weight:600;
+  }
+  .btn:hover{border-color:var(--teal-dim); background:#0f2622;}
+  .btn.full{width:100%;}
+  .btn.danger{color:#ffd7d8; border-color:#5c2326;}
+  .btn.danger:hover{background:#2a1315;}
+
+  .scenarios{display:flex; flex-direction:column; gap:6px;}
+  .scenario-btn{
+    text-align:right; background:var(--panel-2); border:1px solid var(--border);
+    color:var(--ink); border-radius:10px; padding:9px 11px; font-size:12.5px;
+    cursor:pointer; transition:.15s; font-family:inherit; line-height:1.5;
+    display:flex; align-items:flex-start; gap:8px;
+  }
+  .scenario-btn:hover{border-color:var(--gold-dim); background:#1a1710;}
+  .scenario-btn .tag{
+    flex:none; font-size:9.5px; padding:2px 6px; border-radius:6px;
+    background:rgba(211,162,75,.15); color:var(--gold); font-weight:700;
+    border:1px solid rgba(211,162,75,.3); white-space:nowrap;
+  }
+  .scenario-btn .txt{color:var(--ink-dim); flex:1;}
+  .scenario-btn .txt b{color:var(--ink); font-weight:600;}
+
+  .toggle-row{display:flex; align-items:center; justify-content:space-between; font-size:12.5px; color:var(--ink-dim);}
+  .switch{position:relative; width:36px; height:20px; flex:none;}
+  .switch input{opacity:0; width:0; height:0;}
+  .slider{position:absolute; inset:0; background:var(--panel-2); border:1px solid var(--border); border-radius:20px; cursor:pointer; transition:.2s;}
+  .slider:before{content:""; position:absolute; width:14px; height:14px; left:3px; top:2px; background:var(--muted); border-radius:50%; transition:.2s;}
+  input:checked + .slider{background:rgba(20,184,166,.25); border-color:var(--teal-dim);}
+  input:checked + .slider:before{transform:translateX(-16px); background:var(--teal);}
+
+  #stateBox, #rawBox{
+    display:none; margin-top:10px; background:#081311; border:1px solid var(--border);
+    border-radius:10px; padding:10px; font-size:11px; direction:ltr; text-align:left;
+    max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-word;
+    color:#9fe6d8; font-family:"Cascadia Code","Consolas",monospace;
+  }
+  #stateBox.show, #rawBox.show{display:block;}
+
+  .footer-note{padding:12px 16px; font-size:10.5px; color:var(--muted); line-height:1.6;}
+
+  /* ---------- المنطقة الرئيسية ---------- */
+  #main{display:flex; flex-direction:column; height:100%; min-width:0; min-height:0;}
+  #topbar{
+    display:flex; align-items:center; gap:12px; padding:12px 20px;
+    border-bottom:1px solid var(--border); background:rgba(15,31,29,.6); backdrop-filter:blur(6px);
+    flex:none;
+  }
+  #menuBtn{display:none; }
+  #jsonToggleBtn{display:none;}
+  #topbar .title{font-size:13.5px; font-weight:700; flex:1;}
+  #topbar .title small{display:block; font-size:11px; color:var(--muted); font-weight:400; direction:ltr; text-align:right;}
+  .pill{
+    font-size:11px; padding:4px 10px; border-radius:999px; border:1px solid var(--border);
+    color:var(--ink-dim); background:var(--panel-2); display:inline-flex; align-items:center; gap:5px;
+  }
+  .pill.lang-ar{color:var(--gold); border-color:rgba(211,162,75,.35);}
+  .pill.lang-en{color:var(--teal); border-color:rgba(20,184,166,.35);}
+
+  #messages{
+    flex:1; min-height:0; overflow-y:auto; padding:22px 22px 8px;
+    display:flex; flex-direction:column; gap:20px;
+  }
+  .empty-state{
+    margin:auto; text-align:center; color:var(--muted); max-width:420px; padding:30px;
+  }
+  .empty-state .big{font-size:34px; margin-bottom:10px;}
+  .empty-state h2{color:var(--ink-dim); font-size:15px; margin:0 0 6px;}
+  .empty-state p{font-size:12.5px; line-height:1.7; margin:0;}
+
+  /* ---------- الدور الواحد: رسالة المستخدم + رد /chat + تحليل /context ---------- */
+  .turn{display:flex; flex-direction:column; gap:10px; max-width:820px; width:100%; animation:pop .18s ease;}
+  @keyframes pop{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
+
+  .in-msg{align-self:flex-start; display:flex; gap:10px; max-width:88%;}
+  .in-msg .avatar{flex:none; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; background:linear-gradient(135deg,#2a5a52,#173a34); border:1px solid var(--border);}
+  .in-msg .bubble{background:var(--bubble-user); border:1px solid #1c4a42; border-top-right-radius:4px; padding:10px 14px; border-radius:16px; font-size:13.5px; line-height:1.7;}
+  .in-msg .bubble[dir=ltr]{text-align:left;}
+
+  .track-label{
+    font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; font-weight:800;
+    display:flex; align-items:center; gap:6px; padding:0 2px; opacity:.85;
+  }
+  .track-label.chat{color:var(--teal);}
+  .track-label.ctx{color:var(--violet);}
+
+  /* ---------- بطاقة رد /chat ---------- */
+  .chat-panel{border-inline-start:3px solid var(--teal-dim); padding-inline-start:12px; display:flex; flex-direction:column; gap:8px;}
+  .bot-msg{display:flex; gap:10px; max-width:100%;}
+  .bot-msg .avatar{flex:none; width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; background:linear-gradient(135deg, var(--gold-dim), #6b4a1e); border:1px solid var(--border);}
+  .bubble-wrap{display:flex; flex-direction:column; gap:8px; min-width:0; flex:1;}
+  .bubble{
+    padding:10px 14px; border-radius:16px; font-size:13.5px; line-height:1.75;
+    box-shadow:0 2px 6px rgba(0,0,0,.2); word-wrap:break-word;
+    background:var(--bubble-bot); border:1px solid var(--border); border-top-left-radius:4px;
+  }
+  .bubble.error{background:#2a1315; border-color:#5c2326; color:#ffd7d8;}
+  .bubble[dir="ltr"]{text-align:left;}
+  .meta-line{font-size:10.5px; color:var(--muted); padding:0 4px;}
+
+  /* ---------- بطاقات الأماكن ---------- */
+  .cards-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:10px;}
+  .place-card{
+    background:#111c1a; border:1px solid var(--border); border-radius:12px; overflow:hidden;
+    transition:.15s; display:flex; flex-direction:column;
+  }
+  .place-card:hover{border-color:var(--gold-dim); transform:translateY(-2px);}
+  .place-card .thumb{
+    height:70px; background:linear-gradient(135deg, #1c3733, #0e211d);
+    display:flex; align-items:center; justify-content:center; font-size:22px; color:var(--muted);
+    position:relative;
+  }
+  .place-card .pos{
+    position:absolute; top:6px; right:6px; background:rgba(0,0,0,.5); color:var(--gold);
+    font-size:10.5px; padding:2px 7px; border-radius:999px; font-weight:700;
+  }
+  .place-card .body{padding:9px 11px 11px; display:flex; flex-direction:column; gap:5px; flex:1;}
+  .place-card .name{font-size:12.5px; font-weight:700; color:var(--ink);}
+  .place-card .name-en{font-size:10.5px; color:var(--muted); direction:ltr; text-align:right;}
+  .place-card .rating{font-size:11px; color:var(--gold); display:flex; align-items:center; gap:4px;}
+  .place-card .tags{display:flex; flex-wrap:wrap; gap:4px; margin-top:2px;}
+  .tag-pill{font-size:9.5px; padding:2px 6px; border-radius:6px; background:rgba(20,184,166,.12); color:var(--teal); border:1px solid rgba(20,184,166,.25);}
+  .place-card .reason{font-size:10.5px; color:var(--ink-dim); font-style:italic; line-height:1.5; margin-top:2px; border-right:2px solid var(--gold-dim); padding-right:7px;}
+  .place-card .footline{display:flex; justify-content:space-between; font-size:10px; color:var(--muted); margin-top:auto; padding-top:6px;}
+  .price-badge{font-size:9.5px; padding:1px 6px; border-radius:5px; border:1px solid var(--border);}
+
+  /* ---------- الخطة ---------- */
+  .plan-box{background:#111c1a; border:1px solid var(--border); border-radius:12px; padding:12px 14px;}
+  .plan-box .summary{font-size:12.5px; color:var(--gold); margin-bottom:10px; font-weight:600;}
+  .plan-costs{display:flex; gap:10px; font-size:10.5px; color:var(--ink-dim); margin-bottom:12px; flex-wrap:wrap;}
+  .plan-costs span b{color:var(--ink);}
+  .day-block{margin-bottom:12px;}
+  .day-title{font-size:11.5px; font-weight:700; color:var(--teal); margin-bottom:7px; display:flex; align-items:center; gap:6px;}
+  .day-title .n{width:18px; height:18px; border-radius:50%; background:var(--teal); color:#062420; font-size:10px; display:flex; align-items:center; justify-content:center; font-weight:800;}
+  .timeline{position:relative; padding-right:16px; border-right:2px dashed var(--border);}
+  .stop{position:relative; padding:0 12px 12px 0; font-size:11.5px;}
+  .stop:before{content:""; position:absolute; right:-21px; top:3px; width:9px; height:9px; border-radius:50%; background:var(--panel); border:2px solid var(--teal);}
+  .stop.meal:before{border-color:var(--gold);}
+  .stop.rest:before{border-color:var(--muted);}
+  .stop .time{color:var(--muted); font-size:10px; direction:ltr; display:inline-block;}
+  .stop .stopname{font-weight:600; color:var(--ink);}
+  .stop .why{color:var(--ink-dim); font-size:10.5px; margin-top:2px;}
+  .tradeoff{background:rgba(229,72,77,.08); border:1px solid rgba(229,72,77,.3); border-radius:9px; padding:8px 10px; font-size:11px; color:#ffb3b5; margin-top:6px;}
+
+  /* ---------- المقارنة ---------- */
+  .compare-box{overflow-x:auto;}
+  table.compare-table{border-collapse:collapse; width:100%; font-size:11.5px; background:#111c1a; border-radius:10px; overflow:hidden;}
+  table.compare-table th, table.compare-table td{padding:8px 10px; border-bottom:1px solid var(--border); text-align:center;}
+  table.compare-table th{background:var(--panel-2); color:var(--ink-dim); font-weight:700; font-size:10.5px;}
+  table.compare-table td:first-child, table.compare-table th:first-child{text-align:right; color:var(--ink-dim);}
+  .winner-col{background:rgba(211,162,75,.08); color:var(--gold) !important; font-weight:700;}
+  .verdict-note{margin-top:8px; font-size:11.5px; color:var(--gold); background:rgba(211,162,75,.08); border:1px solid rgba(211,162,75,.25); border-radius:9px; padding:8px 10px;}
+
+  /* ---------- القسم المستقل: الجيسون الصادر لطبقة التوصية/التخطيط ----------
+     قسم منفصل تمامًا عن عمود الشات (طلب صريح: "ليس في نفس مكان الشات").
+     يعرض ConversationState الحالي — بالضبط ما سيُرسَل حين يكتمل الجمع، محدَّثًا
+     حيًّا بعد كل رد. لسا غير مرتبط فعليًا بطبقة توصية حقيقية (mock فقط). */
+  #jsonPanel{
+    background:linear-gradient(180deg, #1a1608, #120e04);
+    border-right:1px solid #4a3a12;
+    display:flex; flex-direction:column; overflow-y:auto; min-height:0;
+  }
+  .jp-head{padding:16px 16px 12px; border-bottom:1px solid #4a3a12;}
+  .jp-head h2{font-size:13.5px; margin:0 0 4px; font-weight:800; color:var(--gold); display:flex; align-items:center; gap:8px;}
+  .jp-head p{margin:0; font-size:11px; color:var(--muted); line-height:1.6;}
+  .jp-status{margin:10px 16px 0; padding:8px 11px; border-radius:9px; font-size:11.5px; display:flex; align-items:center; gap:7px;}
+  .jp-status.pending{background:rgba(224,168,59,.09); border:1px solid rgba(224,168,59,.3); color:var(--amber);}
+  .jp-status.ready{background:rgba(62,207,142,.09); border:1px solid rgba(62,207,142,.3); color:var(--ok);}
+  .jp-status.empty{background:var(--panel-2); border:1px solid var(--border); color:var(--muted);}
+  .jp-body{padding:14px 16px; flex:1;}
+  .jp-field-list{display:flex; flex-direction:column; gap:7px;}
+  .jp-field{background:#0d0a03; border:1px solid #3a2e0e; border-radius:9px; padding:8px 11px; display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .jp-field.null{opacity:.38;}
+  .jp-field .k{font-size:11px; color:var(--muted); font-family:"Cascadia Code","Consolas",monospace; direction:ltr;}
+  .jp-field .v{font-size:12px; font-weight:700; color:var(--gold); direction:ltr; text-align:left;}
+  .jp-field.null .v{color:var(--muted); font-weight:400;}
+  .jp-field .v.tags{display:flex; flex-wrap:wrap; gap:4px; justify-content:flex-end;}
+  .jp-field .v.tags span{background:rgba(211,162,75,.12); border:1px solid rgba(211,162,75,.3); border-radius:5px; padding:1px 6px; font-size:10.5px;}
+  .jp-raw-toggle{margin:12px 16px 0; width:calc(100% - 32px);}
+  .jp-raw{display:none; margin:10px 16px 16px; background:#08060f; border:1px solid #3a2e0e; border-radius:9px; padding:10px; font-size:11px; direction:ltr; text-align:left; white-space:pre-wrap; word-break:break-word; color:#f0d999; font-family:"Cascadia Code","Consolas",monospace; max-height:280px; overflow:auto;}
+  .jp-raw.show{display:block;}
+  .jp-empty-state{margin:auto; text-align:center; color:var(--muted); padding:30px 20px; font-size:12px; line-height:1.8;}
+  .jp-empty-state .big{font-size:28px; margin-bottom:8px;}
+
+  /* ---------- لوحة الفهم المنظم /context ---------- */
+  .ctx-track{border-inline-start:3px solid var(--violet); padding-inline-start:12px;}
+  .ctx-panel{background:#15122a; border:1px solid #2a2550; border-radius:12px; overflow:hidden;}
+  .ctx-panel.error{background:#2a1315; border-color:#5c2326;}
+  .ctx-error-text{padding:10px 14px; color:#ffd7d8; font-size:12.5px;}
+
+  .ctx-head{display:flex; align-items:center; gap:10px; padding:9px 12px; border-bottom:1px solid #2a2550; background:#1a1636; flex-wrap:wrap;}
+  .intent-badge{font-size:11px; font-weight:800; padding:4px 10px; border-radius:999px; display:inline-flex; align-items:center; gap:6px; border:1px solid;}
+  .intent-badge .en{font-size:9.5px; opacity:.7; direction:ltr; font-weight:600;}
+  .ib-recommend{color:var(--teal); border-color:rgba(20,184,166,.4); background:rgba(20,184,166,.1);}
+  .ib-search{color:#5fd6c6; border-color:rgba(95,214,198,.4); background:rgba(95,214,198,.08);}
+  .ib-details{color:var(--gold); border-color:rgba(211,162,75,.4); background:rgba(211,162,75,.1);}
+  .ib-create{color:var(--violet); border-color:rgba(139,124,246,.4); background:rgba(139,124,246,.1);}
+  .ib-modify{color:var(--orange); border-color:rgba(224,138,75,.4); background:rgba(224,138,75,.1);}
+  .ib-general{color:var(--muted); border-color:var(--border); background:var(--panel);}
+
+  .conf-wrap{display:flex; align-items:center; gap:6px; margin-right:auto; font-size:10.5px; color:var(--ink-dim);}
+  .conf-track{width:78px; height:6px; border-radius:99px; background:#0d0b1f; border:1px solid #2a2550; overflow:hidden; position:relative;}
+  .conf-fill{position:absolute; top:0; right:0; height:100%; border-radius:99px; transition:width .4s;}
+  .conf-val{font-family:"Cascadia Code","Consolas",monospace; direction:ltr; font-size:10.5px;}
+
+  .ctx-body{padding:11px 12px; display:flex; flex-direction:column; gap:10px;}
+  .ctx-row{display:flex; flex-wrap:wrap; gap:14px; align-items:flex-start;}
+  .ctx-block{flex:1; min-width:180px;}
+  .ctx-block .blk-title{font-size:9.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:700; margin:0 0 6px;}
+
+  .query-text{background:#0d0b1f; border:1px solid #2a2550; border-radius:8px; padding:7px 10px; font-size:12px; color:var(--ink); line-height:1.6;}
+  .query-text[dir=ltr]{text-align:left;}
+
+  .chip-grid{display:flex; flex-wrap:wrap; gap:6px;}
+  .chip{display:flex; flex-direction:column; gap:1px; background:#0d0b1f; border:1px solid #2a2550; border-radius:8px; padding:5px 9px; min-width:78px;}
+  .chip .k{font-size:9px; color:var(--muted);}
+  .chip .v{font-size:11.5px; font-weight:700; color:var(--ink); direction:ltr; text-align:right;}
+  .chip.null{opacity:.4;}
+  .chip.null .v{color:var(--muted); font-weight:400;}
+  .chip.hl{border-color:var(--violet); background:rgba(139,124,246,.06);}
+  .chip.hl .v{color:var(--violet);}
+
+  .pref-list{display:flex; flex-direction:column; gap:5px;}
+  .pref-row{display:grid; grid-template-columns:82px 1fr 40px; align-items:center; gap:8px; font-size:11px;}
+  .pref-row .plabel{color:var(--ink-dim);}
+  .pref-track{height:7px; border-radius:99px; background:#0d0b1f; border:1px solid #2a2550; position:relative; overflow:hidden;}
+  .pref-fill{position:absolute; top:0; height:100%; border-radius:99px;}
+  .pref-fill.pos{right:0; background:linear-gradient(90deg, var(--teal-dim), var(--teal));}
+  .pref-fill.neg{right:0; background:linear-gradient(90deg, var(--danger), #f0787c);}
+  .pref-val{font-family:"Cascadia Code","Consolas",monospace; direction:ltr; text-align:left; color:var(--ink-dim); font-size:10px;}
+  .pref-val.neg{color:#f0787c;}
+  .empty-inline{font-size:11px; color:var(--muted); font-style:italic;}
+
+  .pill-tags{display:flex; flex-wrap:wrap; gap:5px;}
+  .ptag{font-size:10px; padding:2px 8px; border-radius:6px; background:rgba(20,184,166,.1); color:var(--teal); border:1px solid rgba(20,184,166,.25); direction:ltr;}
+  .ptag.excl{background:rgba(229,72,77,.1); color:#f0787c; border-color:rgba(229,72,77,.3);}
+  .ptag.req{background:rgba(211,162,75,.1); color:var(--gold); border-color:rgba(211,162,75,.3);}
+
+  .clarify-box{background:rgba(224,168,59,.09); border:1px solid rgba(224,168,59,.35); border-radius:9px; padding:9px 11px;}
+  .clarify-box .ch{font-size:10.5px; font-weight:800; color:var(--amber); margin-bottom:5px; display:flex; align-items:center; gap:6px;}
+  .clarify-box .cq{font-size:12.5px; color:var(--ink); line-height:1.6; margin-bottom:7px;}
+  .clarify-box .cq[dir=ltr]{text-align:left;}
+  .miss-tags{display:flex; flex-wrap:wrap; gap:5px;}
+  .miss-tag{font-size:10px; padding:2px 7px; border-radius:6px; background:rgba(224,168,59,.12); color:var(--amber); border:1px solid rgba(224,168,59,.3); direction:ltr; font-family:"Cascadia Code","Consolas",monospace;}
+  .ready-note{font-size:11px; color:var(--ok); display:flex; align-items:center; gap:6px;}
+
+  .ctx-foot{display:flex; align-items:center; gap:8px; padding:6px 12px; border-top:1px solid #2a2550; font-size:9.5px; color:var(--muted);}
+  .raw-toggle{margin-right:auto; color:var(--ink-dim); cursor:pointer; background:none; border:none; font-size:10px; font-family:inherit; text-decoration:underline dotted; padding:0;}
+  .raw-toggle:hover{color:var(--violet);}
+  .raw-json{display:none; margin:0 12px 10px; background:#0a0818; border:1px solid #2a2550; border-radius:8px; padding:9px; font-size:10.5px; direction:ltr; text-align:left; max-height:240px; overflow:auto; white-space:pre-wrap; word-break:break-word; color:#c9bcff; font-family:"Cascadia Code","Consolas",monospace;}
+  .raw-json.show{display:block;}
+
+  /* ---------- شريط الكتابة ---------- */
+  #composer{
+    display:flex; gap:10px; padding:14px 20px; border-top:1px solid var(--border);
+    background:rgba(15,31,29,.6); flex:none;
+  }
+  #msgInput{
+    flex:1; resize:none; background:var(--panel-2); border:1px solid var(--border); color:var(--ink);
+    border-radius:12px; padding:11px 14px; font-size:13.5px; font-family:inherit; outline:none;
+    max-height:120px; line-height:1.5; transition:border-color .15s, box-shadow .15s;
+  }
+  #msgInput:focus{border-color:var(--teal); box-shadow:0 0 0 3px rgba(20,184,166,.15);}
+  #sendBtn{
+    flex:none; width:46px; height:46px; border-radius:12px; border:none; cursor:pointer;
+    background:linear-gradient(135deg, var(--teal), var(--violet)); color:#08120f; font-size:18px;
+    display:flex; align-items:center; justify-content:center; transition:.15s;
+  }
+  #sendBtn:hover{filter:brightness(1.1);}
+  #sendBtn:disabled{opacity:.5; cursor:not-allowed;}
+
+  .typing{display:flex; gap:4px; padding:4px 2px;}
+  .typing span{width:6px; height:6px; border-radius:50%; background:var(--muted); animation:blink 1.2s infinite;}
+  .typing span:nth-child(2){animation-delay:.2s;}
+  .typing span:nth-child(3){animation-delay:.4s;}
+  @keyframes blink{0%,80%,100%{opacity:.25;} 40%{opacity:1;}}
+
+  ::-webkit-scrollbar{width:8px; height:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--border); border-radius:8px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="logo">🧭</div>
+      <div>
+        <h1>مختبر الطبقة الموحّد</h1>
+        <p>/chat + /context معًا · ai-service</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">⚙️ الاتصال</div>
+      <div class="field">
+        <label>عنوان الخدمة (Base URL)</label>
+        <div class="row">
+          <input type="text" id="baseUrl" value="http://127.0.0.1:8002">
+          <button class="iconbtn" title="فحص الاتصال" onclick="checkHealth()">↻</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>X-Internal-Secret</label>
+        <input type="password" id="secret" value="dev-secret-change-me">
+      </div>
+      <div class="field">
+        <label>User ID (لـ /chat)</label>
+        <input type="text" id="userId" value="u_demo">
+      </div>
+      <div class="field">
+        <label>Session ID (لـ /chat فقط — /context بلا حالة)</label>
+        <div class="row">
+          <input type="text" id="sessionId" value="">
+          <button class="iconbtn" title="جلسة جديدة" onclick="newSession()">⟳</button>
+        </div>
+      </div>
+      <div class="status-row">
+        <span class="dot" id="healthDot"></span>
+        <span id="healthText">لم يُفحص الاتصال بعد</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">🚀 سيناريوهات جاهزة</div>
+      <div class="scenarios" id="scenarios"></div>
+    </div>
+
+    <div class="section">
+      <div class="toggle-row" style="margin-bottom:8px;">
+        <span>🧾 حالة /chat (state)</span>
+        <label class="switch"><input type="checkbox" id="toggleState" onchange="toggleBox('stateBox', this.checked)"><span class="slider"></span></label>
+      </div>
+      <pre id="stateBox">لا توجد بيانات بعد</pre>
+      <div class="toggle-row" style="margin:10px 0 8px;">
+        <span>🐞 رد /chat الخام</span>
+        <label class="switch"><input type="checkbox" id="toggleRaw" onchange="toggleBox('rawBox', this.checked)"><span class="slider"></span></label>
+      </div>
+      <pre id="rawBox">لا توجد بيانات بعد</pre>
+    </div>
+
+    <div class="section" style="border-bottom:none;">
+      <button class="btn danger full" onclick="clearConversation()">🗑️ مسح المحادثة الحالية</button>
+    </div>
+
+    <div class="footer-note">
+      كل رسالة تُرسَل لكلا النقطتين بالتوازي: <b>/chat</b> (محادثة بحالة، تعرض
+      بطاقات/خطط) و<b>/context</b> (فهم منظم بلا حالة لـ Laravel). الرد الأول
+      بحدود teal، والتحليل الثاني بحدود بنفسجية — لنفس رسالتك بالضبط.
+    </div>
+  </aside>
+
+  <main id="main">
+    <div id="topbar">
+      <button class="iconbtn" id="menuBtn" onclick="toggleSidebar(true)">☰</button>
+      <div class="title">
+        مختبر موحّد
+        <small id="sessionLabel">—</small>
+      </div>
+      <span class="pill" id="langPill">لغة: —</span>
+      <span class="pill" id="turnPill">0 رسائل</span>
+      <button class="iconbtn" id="jsonToggleBtn" onclick="toggleJsonPanel(true)" title="الجيسون الصادر">📤</button>
+    </div>
+
+    <div id="messages">
+      <div class="empty-state" id="emptyState">
+        <div class="big">🧭</div>
+        <h2>ابدأ محادثة اختبار موحّدة</h2>
+        <p>هاي طبقة محادثة فقط: تفهم نيتك وتجمع المعلومات بالسؤال، ولا تعرض
+          أماكن أو خططًا من عندها (إلا استعلام تفاصيل مباشر عن مكان محدد).
+          بمجرد اكتمال الجمع، الجيسون الجاهز للإرسال لطبقة التوصية بيظهر
+          بالقسم الذهبي 📤 عالشمال — منفصل تمامًا عن هالمحادثة.</p>
+      </div>
+    </div>
+
+    <div id="composer">
+      <textarea id="msgInput" rows="1" placeholder="اكتب رسالتك هنا… (Enter للإرسال، Shift+Enter لسطر جديد)"></textarea>
+      <button id="sendBtn" onclick="onSend()">➤</button>
+    </div>
+  </main>
+
+  <div id="jsonBackdrop" onclick="toggleJsonPanel(false)"></div>
+  <aside id="jsonPanel">
+    <div class="jp-head">
+      <h2>📤 الجيسون الصادر</h2>
+      <p>ConversationState الحالي — بالضبط ما سيُرسَل لطبقة التوصية/التخطيط عند
+        اكتمال الجمع. <b>غير مرتبط بعد بطبقة حقيقية</b> — هذا معاينة فقط.</p>
+    </div>
+    <div id="jpStatus"></div>
+    <div class="jp-body" id="jpBody">
+      <div class="jp-empty-state">
+        <div class="big">📭</div>
+        ابدأ محادثة ليظهر هون الجيسون المتراكم من إجاباتك.
+      </div>
+    </div>
+    <button class="btn full jp-raw-toggle" onclick="document.getElementById('jpRaw').classList.toggle('show')">عرض/إخفاء JSON الخام الكامل</button>
+    <pre class="jp-raw" id="jpRaw"></pre>
+  </aside>
+</div>
+
+<script>
+/* ============================= الإعدادات والحالة ============================= */
+const LS_KEY = "labTesterSettings_v1";
+
+function uuid(){
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c=>{
+    const r = Math.random()*16|0, v = c==="x" ? r : (r&0x3|0x8);
+    return v.toString(16);
+  });
+}
+
+function loadSettings(){
+  try{
+    const saved = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
+    if(saved.baseUrl) document.getElementById("baseUrl").value = saved.baseUrl;
+    if(saved.secret) document.getElementById("secret").value = saved.secret;
+    if(saved.userId) document.getElementById("userId").value = saved.userId;
+    document.getElementById("sessionId").value = saved.sessionId || uuid();
+  }catch(e){
+    document.getElementById("sessionId").value = uuid();
+  }
+}
+function persistSettings(){
+  const data = {
+    baseUrl: document.getElementById("baseUrl").value.trim(),
+    secret: document.getElementById("secret").value,
+    userId: document.getElementById("userId").value.trim(),
+    sessionId: document.getElementById("sessionId").value.trim(),
+  };
+  localStorage.setItem(LS_KEY, JSON.stringify(data));
+  return data;
+}
+["baseUrl","secret","userId","sessionId"].forEach(id=>{
+  document.addEventListener("DOMContentLoaded", ()=>{
+    document.getElementById(id).addEventListener("change", persistSettings);
+  });
+});
+
+function newSession(){
+  document.getElementById("sessionId").value = uuid();
+  persistSettings();
+  clearConversation();
+}
+
+function toggleSidebar(open){
+  document.getElementById("sidebar").classList.toggle("open", open);
+  document.getElementById("sidebarBackdrop").classList.toggle("show", open);
+}
+function toggleJsonPanel(open){
+  document.getElementById("jsonPanel").classList.toggle("open", open);
+  document.getElementById("jsonBackdrop").classList.toggle("show", open);
+}
+
+/* ============================= فحص الصحة ============================= */
+async function checkHealth(){
+  const dot = document.getElementById("healthDot");
+  const text = document.getElementById("healthText");
+  const base = document.getElementById("baseUrl").value.trim().replace(/\/$/, "");
+  text.textContent = "جاري الفحص…";
+  try{
+    const res = await fetch(base + "/health");
+    if(res.ok){ dot.className = "dot ok"; text.textContent = "متصل — الخدمة تعمل"; }
+    else{ dot.className = "dot bad"; text.textContent = "الخدمة ترد بخطأ (" + res.status + ")"; }
+  }catch(e){
+    dot.className = "dot bad";
+    text.textContent = "تعذّر الاتصال — تأكد من تشغيل uvicorn وCORS";
+  }
+}
+
+/* ============================= السيناريوهات الجاهزة ============================= */
+const SCENARIOS = [
+  {tag:"تفاصيل", label:"معلومات مكان بالاسم (من الداتا)", text:"عطيني معلومات عن قلعة حلب"},
+  {tag:"بق مُصلَّح", label:'"بدي توصيات" (كان يرجع out_of_scope)', text:"طيب بدي توصيات"},
+  {tag:"وجهتان", label:"دمشق وحلب معًا + مجموعة بنفس الرسالة", text:"اريد الذهاب لدمشق وحلب مع اصدقائي"},
+  {tag:"خطة ①", label:"ابدأ التخطيط", text:"بدي اعمل رحلة"},
+  {tag:"خطة ②", label:"جواب: هدف الرحلة", text:"بدي مغامرة"},
+  {tag:"خطة ③", label:"جواب: الوجهة", text:"لحلب"},
+  {tag:"خطة ④", label:"جواب: التصنيف", text:"تاريخيه"},
+  {tag:"خطة ⑤", label:"جواب: الميزانية", text:"متوسط"},
+  {tag:"خطة ⑥", label:"جواب: المجموعة", text:"مع عيلتي"},
+  {tag:"خطة ⑦", label:"جواب: المدة → يؤكّد الجاهزية (بلا خطة)", text:"تلات ايام"},
+  {tag:"تاريخ", label:"تاريخ بدء نسبي (اختياري) → بعد 5 ايام", text:"بدي ابلش بعد 5 ايام"},
+  {tag:"مناسبة", label:"شهر عسل → couple + trip_purpose=romantic", text:"بدنا نعمل شهر عسل بطرطوس"},
+  {tag:"طقس", label:"هروب من الحر → tag:nature (بلا حقل جديد)", text:"هربان من الحر بدي مكان بارد"},
+  {tag:"روتين", label:"وسيلة نقل + وقت مفضّل", text:"بفضل الصبح وبسيارتي"},
+  {tag:"تعديل بيانات ①", label:"أضف وجهة (دمشق)", text:"بدي روح دمشق"},
+  {tag:"تعديل بيانات ②", label:"وأضف حلب كمان (تراكمي)", text:"وحلب كمان"},
+  {tag:"تعديل بيانات ③", label:"ألغِ دمشق فقط — إزالة صريحة", text:"بدي الغي دمشق"},
+  {tag:"تعديل بيانات", label:"ألغِ اهتمام تاريخي (بعد إضافته)", text:"الغي التاريخي"},
+  {tag:"بدء جديد ①", label:"اطلب خطة جديدة → يسأل تأكيد أولًا", text:"بدي خطة جديدة"},
+  {tag:"بدء جديد ②", label:"تأكيد → مسح كامل + سؤال الهدف فورًا", text:"اكيد"},
+  {tag:"تعديل خطة", label:"حذف مكان من خطة قائمة فعلًا", text:"شيل قلعة حلب من الخطة"},
+  {tag:"رفض", label:"رفض + سؤال تشخيصي", text:"ما عجبوني"},
+  {tag:"ترحيب", label:"تحية شخصية", text:"مرحبا"},
+  {tag:"خارج", label:"طلب غير سياحي", text:"بدي احجز طيران لتركيا"},
+  {tag:"EN", label:"English · details", text:"is palmyra worth visiting?"},
+];
+function renderScenarios(){
+  const wrap = document.getElementById("scenarios");
+  wrap.innerHTML = "";
+  SCENARIOS.forEach(s=>{
+    const btn = document.createElement("button");
+    btn.className = "scenario-btn";
+    btn.innerHTML = `<span class="tag">${s.tag}</span><span class="txt"><b>${s.label}</b><br>${escapeHtml(s.text)}</span>`;
+    btn.onclick = ()=> sendMessage(s.text);
+    wrap.appendChild(btn);
+  });
+}
+
+/* ============================= لوحات التصحيح ============================= */
+function toggleBox(id, show){
+  document.getElementById(id).classList.toggle("show", show);
+}
+function updateDebugBoxes(state, raw){
+  document.getElementById("stateBox").textContent = JSON.stringify(state ?? {}, null, 2);
+  document.getElementById("rawBox").textContent = JSON.stringify(raw ?? {}, null, 2);
+}
+
+/* ============================= عدّاد الرسائل ولغة آخر رد ============================= */
+let turnCount = 0;
+function bumpTurn(){
+  turnCount++;
+  document.getElementById("turnPill").textContent = turnCount + " رسائل";
+}
+function setLangPill(lang){
+  const pill = document.getElementById("langPill");
+  pill.textContent = "لغة: " + (lang === "en" ? "English" : lang === "ar" ? "عربي" : "—");
+  pill.className = "pill " + (lang === "en" ? "lang-en" : lang === "ar" ? "lang-ar" : "");
+}
+
+/* ============================= أدوات مشتركة ============================= */
+function scrollToBottom(){
+  const el = document.getElementById("messages");
+  el.scrollTop = el.scrollHeight;
+}
+function hideEmptyState(){
+  const el = document.getElementById("emptyState");
+  if(el) el.remove();
+}
+function escapeHtml(str){
+  const d = document.createElement("div");
+  d.textContent = str ?? "";
+  return d.innerHTML;
+}
+function isLtrText(v){
+  return /[a-zA-Z]/.test(v||"") && !/[؀-ۿ]/.test(v||"");
+}
+
+/* ============================= رسم رسالة المستخدم ============================= */
+function appendUserMessage(text, container){
+  const dir = isLtrText(text) ? "ltr" : "rtl";
+  const el = document.createElement("div");
+  el.className = "in-msg";
+  el.innerHTML = `<div class="avatar">🧑</div><div class="bubble" dir="${dir}">${escapeHtml(text)}</div>`;
+  container.appendChild(el);
+}
+
+function appendTyping(container){
+  const el = document.createElement("div");
+  el.className = "chat-panel";
+  el.id = "typingPanel";
+  el.innerHTML = `
+    <div class="track-label chat">💬 /chat + 🧠 /context</div>
+    <div class="bot-msg"><div class="avatar">🤖</div><div class="bubble-wrap"><div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div></div></div>`;
+  container.appendChild(el);
+}
+function removeTyping(){
+  const el = document.getElementById("typingPanel");
+  if(el) el.remove();
+}
+
+/* ---------- بطاقات الأماكن ---------- */
+const PRICE_LABELS = {free:"مجاني", cheap:"اقتصادي", medium:"متوسط", expensive:"مرتفع"};
+function renderCards(cards){
+  const items = cards.map((c, i)=>`
+    <div class="place-card">
+      <div class="thumb">🏛️<span class="pos">#${i+1}</span></div>
+      <div class="body">
+        <div class="name">${escapeHtml(c.name_ar)}</div>
+        <div class="name-en">${escapeHtml(c.name_en)}</div>
+        <div class="rating">★ ${c.rating?.toFixed ? c.rating.toFixed(1) : c.rating} <span style="color:var(--muted)">(${c.reviews_count} تقييم)</span></div>
+        ${c.tags && c.tags.length ? `<div class="tags">${c.tags.map(t=>`<span class="tag-pill">${escapeHtml(t.replace("tag:",""))}</span>`).join("")}</div>` : ""}
+        ${c.recommendation_reason ? `<div class="reason">${escapeHtml(c.recommendation_reason)}</div>` : ""}
+        <div class="footline">
+          <span class="price-badge">${PRICE_LABELS[c.price_level] || c.price_level || ""}</span>
+          <span>${c.visit_duration_min ?? "?"} د</span>
+        </div>
+      </div>
+    </div>`).join("");
+  return `<div class="cards-grid">${items}</div>`;
+}
+
+/* ---------- الخطة ---------- */
+function renderPlan(plan){
+  const days = (plan.days || []).map(day=>{
+    const stops = (day.stops || []).map(s=>`
+      <div class="stop ${s.stop_type}">
+        <span class="time">${s.arrival}–${s.departure}</span> ·
+        <span class="stopname">${escapeHtml(s.name_ar)}</span>
+        ${s.cost_estimate ? ` · $${s.cost_estimate}` : ""}
+        ${s.why_here ? `<div class="why">${escapeHtml(s.why_here)}</div>` : ""}
+      </div>`).join("");
+    return `
+      <div class="day-block">
+        <div class="day-title"><span class="n">${day.day_number}</span> ${escapeHtml(day.title_ar || "يوم " + day.day_number)}${day.day_cost_estimate ? ` · تكلفة ~$${day.day_cost_estimate}` : ""}</div>
+        <div class="timeline">${stops}</div>
+      </div>`;
+  }).join("");
+
+  const tradeoffs = (plan.tradeoffs || []).map(t=>`
+    <div class="tradeoff">⚠️ ${escapeHtml(t.issue_ar)}${t.options && t.options.length ? " — خيارات: " + t.options.map(o=>escapeHtml(o.label_ar)).join("، ") : ""}</div>
+  `).join("");
+
+  const totalCost = plan.total_cost_estimate;
+  const costsLine = totalCost ? `
+    <div class="plan-costs">
+      <span>أنشطة: <b>$${totalCost.activities}</b></span>
+      <span>طعام: <b>$${totalCost.food}</b></span>
+      <span>تنقل: <b>$${totalCost.transport}</b></span>
+    </div>` : "";
+
+  return `
+    <div class="plan-box">
+      <div class="summary">🗺️ ${escapeHtml(plan.summary_ar)}</div>
+      ${costsLine}
+      ${days}
+      ${tradeoffs}
+    </div>`;
+}
+
+/* ---------- المقارنة ---------- */
+function renderComparison(cmp){
+  const places = cmp.places || [];
+  const winnerId = cmp.verdict?.winner_place_id;
+  const header = `<tr><th>المحور</th>${places.map(p=>`<th class="${p.place_id===winnerId ? "winner-col":""}">${escapeHtml(p.name_ar)}</th>`).join("")}</tr>`;
+  const rows = (cmp.axes || []).map(axis=>{
+    const cells = places.map(p=>{
+      const val = axis.values ? axis.values[p.place_id] : "—";
+      return `<td class="${p.place_id===winnerId ? "winner-col":""}">${val ?? "—"}</td>`;
+    }).join("");
+    return `<tr><td>${escapeHtml(axis.label_ar)}</td>${cells}</tr>`;
+  }).join("");
+
+  const verdict = cmp.verdict ? `<div class="verdict-note">🏆 ${escapeHtml(cmp.verdict.reason)}</div>` : "";
+
+  return `
+    <div class="compare-box">
+      <table class="compare-table">${header}${rows}</table>
+      ${verdict}
+    </div>`;
+}
+
+/* ---------- القسم المستقل: الجيسون الصادر (#jsonPanel) ----------
+   هذا **بالضبط** الكائن الذي يمرَّره dialogue.py إلى recommender.search /
+   planner.build (state=state) — docs/contract.md §1.1. يُحدَّث حيًّا بعد كل رد
+   /chat، بمعزل تام عن عمود المحادثة (طلب صريح: "ليس في نفس مكان الشات").
+   لا نستدعي أي أداة فعلية هنا — طبقة التوصية الحقيقية غير موصولة بعد. */
+const STATE_FIELD_LABELS = {
+  destination: "destination", dates: "dates", duration_days: "duration_days",
+  budget_level: "budget_level", group_type: "group_type", group_size: "group_size",
+  interests: "interests", pace: "pace",
+  trip_purpose: "trip_purpose", transport_mode: "transport_mode", preferred_time: "preferred_time",
+  excluded_place_ids: "excluded_place_ids", saved_place_ids: "saved_place_ids",
+  current_plan_id: "current_plan_id",
+};
+// نفس ترتيب الجمع المُطبَّق فعليًا بـ dialogue.py (_GATHER_FOR_RECOMMEND / _GATHER_FOR_PLAN)
+const GATHER_FOR_RECOMMEND = ["destination", "interests", "budget_level", "group_type"];
+const GATHER_FOR_PLAN = ["destination", "interests", "budget_level", "group_type", "duration_days"];
+
+function isFieldFilled(state, key){
+  const v = state[key];
+  if(Array.isArray(v)) return v.length > 0;
+  return v !== null && v !== undefined && v !== "";
+}
+
+let lastKnownState = null;
+
+function updateJsonPanel(state){
+  if(!state) return;
+  lastKnownState = state;
+
+  const readyRecommend = GATHER_FOR_RECOMMEND.every(f=>isFieldFilled(state,f));
+  const readyPlan = GATHER_FOR_PLAN.every(f=>isFieldFilled(state,f));
+  const statusEl = document.getElementById("jpStatus");
+  if(readyPlan){
+    statusEl.innerHTML = `<div class="jp-status ready">✅ مكتمل لطبقة التخطيط — جاهز يُرسَل</div>`;
+  }else if(readyRecommend){
+    statusEl.innerHTML = `<div class="jp-status ready">✅ مكتمل لطبقة التوصية (ينقص "duration_days" فقط للتخطيط)</div>`;
+  }else{
+    const missing = GATHER_FOR_RECOMMEND.filter(f=>!isFieldFilled(state,f));
+    statusEl.innerHTML = `<div class="jp-status pending">⏳ لسا قيد الجمع — ناقص: ${missing.join(", ")}</div>`;
+  }
+
+  const fields = Object.entries(STATE_FIELD_LABELS).map(([key, label])=>{
+    const v = state[key];
+    const empty = !isFieldFilled(state, key);
+    let display;
+    if(empty){
+      display = `<span class="v">null</span>`;
+    }else if(key === "destination" || key === "interests" || key === "excluded_place_ids" || key === "saved_place_ids"){
+      const items = key === "interests" ? v.map(t=>t.replace("tag:","")) : v;
+      display = `<span class="v tags">${items.map(i=>`<span>${escapeHtml(String(i))}</span>`).join("")}</span>`;
+    }else if(key === "dates" && v){
+      display = `<span class="v">${escapeHtml(v.start||"?")} → ${escapeHtml(v.end||"?")}</span>`;
+    }else{
+      display = `<span class="v">${escapeHtml(String(v))}</span>`;
+    }
+    return `<div class="jp-field ${empty?"null":""}"><span class="k">${label}</span>${display}</div>`;
+  }).join("");
+
+  document.getElementById("jpBody").innerHTML = `<div class="jp-field-list">${fields}</div>`;
+  document.getElementById("jpRaw").textContent = JSON.stringify(state, null, 2);
+}
+
+function renderChatPanel(data){
+  const lang = data?.state?.language || "ar";
+  const dir = lang === "en" ? "ltr" : "rtl";
+  let extra = "";
+  if(data.cards && data.cards.length) extra += renderCards(data.cards);
+  if(data.plan) extra += renderPlan(data.plan);
+  if(data.comparison) extra += renderComparison(data.comparison);
+
+  return `
+    <div class="chat-panel">
+      <div class="track-label chat">💬 رد /chat</div>
+      <div class="bot-msg">
+        <div class="avatar">🤖</div>
+        <div class="bubble-wrap">
+          <div class="bubble" dir="${dir}">${escapeHtml(data.reply || "")}</div>
+          ${extra}
+          <div class="meta-line">${new Date().toLocaleTimeString("ar-SY")}</div>
+        </div>
+      </div>
+    </div>`;
+}
+function renderChatError(text){
+  return `
+    <div class="chat-panel">
+      <div class="track-label chat">💬 رد /chat</div>
+      <div class="bot-msg">
+        <div class="avatar">⚠️</div>
+        <div class="bubble-wrap"><div class="bubble error">${escapeHtml(text)}</div></div>
+      </div>
+    </div>`;
+}
+
+/* ---------- لوحة تحليل /context ---------- */
+const INTENT_META = {
+  recommend_places:{cls:"ib-recommend", ar:"توصية بأماكن", icon:"✨"},
+  search_places:   {cls:"ib-search",    ar:"بحث عن أماكن", icon:"🔎"},
+  place_details:   {cls:"ib-details",   ar:"تفاصيل مكان",  icon:"📍"},
+  create_plan:     {cls:"ib-create",    ar:"إنشاء خطة",    icon:"🗺️"},
+  modify_plan:     {cls:"ib-modify",    ar:"تعديل خطة",    icon:"✏️"},
+  general_question:{cls:"ib-general",   ar:"سؤال عام",     icon:"💬"},
+};
+const FILTER_LABELS = {governorate:"المحافظة", city:"المدينة", budget_tier:"الميزانية"};
+// تصنيف الوسوم — يطابق عمود place_tags.tag_type بمشروع Laravel حرفيًا
+const TAG_TYPE_LABELS = {vibe:"أجواء", activity:"نشاط", nature:"طبيعة", heritage:"تراث", food:"طعام", timing:"توقيت", emotion:"انطباع", audience:"فئة الزوار"};
+const TRIP_LABELS = {group_type:"المجموعة", duration_minutes:"المدة (دقيقة)", preferred_time:"الوقت المفضّل", season:"الموسم", visit_date:"تاريخ الزيارة", physical_difficulty:"الصعوبة البدنية"};
+const MISS_LABELS = {governorate_or_city:"المحافظة/المدينة", trip_interests:"نوع الاهتمامات", duration:"مدة الرحلة", group_type:"نوع المجموعة"};
+
+function renderContextPanel(d){
+  const meta = INTENT_META[d.intent] || {cls:"ib-general", ar:d.intent, icon:"•"};
+  const conf = typeof d.confidence === "number" ? d.confidence : 0;
+  const confPct = Math.round(conf * 100);
+  const confColor = conf >= 0.7 ? "var(--ok)" : conf >= 0.45 ? "var(--teal)" : "var(--amber)";
+  const lang = d.language || "ar";
+
+  const filterChips = ["governorate","city","budget_tier"].map(k=>{
+    const v = d.filters ? d.filters[k] : null;
+    const isNull = v === null || v === undefined || v === "";
+    const hl = !isNull && k==="governorate";
+    return `<div class="chip ${isNull?"null":""} ${hl?"hl":""}"><span class="k">${FILTER_LABELS[k]}</span><span class="v">${isNull?"—":escapeHtml(String(v))}</span></div>`;
+  }).join("");
+
+  // الوسوم المصنَّفة {tag, tag_type, weight} — تحل محل category+preferences معًا
+  const tags = d.tags || [];
+  let prefHtml;
+  if(tags.length){
+    prefHtml = `<div class="pref-list">` + tags.map(t=>{
+      const w = t.weight;
+      const neg = w < 0;
+      const pct = Math.min(Math.abs(w) * 100, 100);
+      return `<div class="pref-row">
+        <span class="plabel">${escapeHtml(t.tag)} <span style="color:var(--muted)">${TAG_TYPE_LABELS[t.tag_type] || t.tag_type}</span></span>
+        <div class="pref-track"><div class="pref-fill ${neg?"neg":"pos"}" style="width:${pct}%"></div></div>
+        <span class="pref-val ${neg?"neg":""}">${w>0?"+":""}${w}</span>
+      </div>`;
+    }).join("") + `</div>`;
+  }else{
+    prefHtml = `<div class="empty-inline">— لا وسوم مستخرجة</div>`;
+  }
+
+  const trip = d.trip_context || {};
+  const tripKeys = Object.keys(TRIP_LABELS).filter(k=> trip[k] !== null && trip[k] !== undefined && trip[k] !== "");
+  const tripHtml = tripKeys.length
+    ? `<div class="chip-grid">` + tripKeys.map(k=>`<div class="chip hl"><span class="k">${TRIP_LABELS[k]}</span><span class="v">${escapeHtml(String(trip[k]))}</span></div>`).join("") + `</div>`
+    : `<div class="empty-inline">— لا سياق رحلة محدد</div>`;
+
+  const excl = d.exclusions || {categories:[], place_ids:[], requirements:[]};
+  const exclParts = [];
+  (excl.categories||[]).forEach(c=> exclParts.push(`<span class="ptag excl">🚫 ${escapeHtml(c)}</span>`));
+  (excl.place_ids||[]).forEach(p=> exclParts.push(`<span class="ptag excl">🚫 ${escapeHtml(p)}</span>`));
+  (excl.requirements||[]).forEach(r=> exclParts.push(`<span class="ptag req">♿ ${escapeHtml(r)}</span>`));
+  const exclHtml = exclParts.length ? `<div class="pill-tags">${exclParts.join("")}</div>` : `<div class="empty-inline">— لا استبعادات</div>`;
+
+  let clarify;
+  if(d.requires_clarification){
+    const q = d.clarification_question || "";
+    const dir = isLtrText(q) ? "ltr" : "rtl";
+    const missTags = (d.missing_information||[]).map(m=>`<span class="miss-tag" title="${escapeHtml(MISS_LABELS[m]||m)}">${escapeHtml(m)}</span>`).join("");
+    clarify = `<div class="clarify-box">
+      <div class="ch">⚠️ يحتاج توضيحًا</div>
+      <div class="cq" dir="${dir}">${escapeHtml(q)}</div>
+      <div class="miss-tags">${missTags}</div>
+    </div>`;
+  }else{
+    clarify = `<div class="ready-note">✅ المعلومات كافية — جاهز لتمريره إلى Laravel</div>`;
+  }
+
+  const qtDir = isLtrText(d.query_text||"") ? "ltr" : "rtl";
+  const rawId = "raw_" + Math.random().toString(36).slice(2,9);
+
+  return `
+    <div class="ctx-track">
+      <div class="track-label ctx">🧠 تحليل /context</div>
+      <div class="ctx-panel">
+        <div class="ctx-head">
+          <span class="intent-badge ${meta.cls}">${meta.icon} ${meta.ar} <span class="en">${d.intent}</span></span>
+          <span class="pill" style="font-size:10px; padding:2px 8px;">${lang}</span>
+          <div class="conf-wrap">
+            <span>ثقة</span>
+            <div class="conf-track"><div class="conf-fill" style="width:${confPct}%; background:${confColor}"></div></div>
+            <span class="conf-val">${conf.toFixed(2)}</span>
+          </div>
+        </div>
+        <div class="ctx-body">
+          <div class="query-text" dir="${qtDir}">🔤 ${escapeHtml(d.query_text || "—")}</div>
+          <div class="ctx-row">
+            <div class="ctx-block">
+              <div class="blk-title">🎯 filters</div>
+              <div class="chip-grid">${filterChips}</div>
+            </div>
+            <div class="ctx-block">
+              <div class="blk-title">🧳 trip_context</div>
+              ${tripHtml}
+            </div>
+          </div>
+          <div class="ctx-block">
+            <div class="blk-title">🏷️ tags</div>
+            ${prefHtml}
+          </div>
+          <div class="ctx-block">
+            <div class="blk-title">⛔ exclusions</div>
+            ${exclHtml}
+          </div>
+          ${clarify}
+        </div>
+        <div class="ctx-foot">
+          <span>📄 ${escapeHtml(d.contract_version || "conversation_context_v1")}</span>
+          <button class="raw-toggle" onclick="document.getElementById('${rawId}').classList.toggle('show')">JSON خام</button>
+        </div>
+        <pre class="raw-json" id="${rawId}">${escapeHtml(JSON.stringify(d, null, 2))}</pre>
+      </div>
+    </div>`;
+}
+function renderContextError(text){
+  return `
+    <div class="ctx-track">
+      <div class="track-label ctx">🧠 تحليل /context</div>
+      <div class="ctx-panel error"><div class="ctx-error-text">⚠️ ${escapeHtml(text)}</div></div>
+    </div>`;
+}
+
+/* ============================= الإرسال (يستدعي /chat و/context بالتوازي) ============================= */
+async function fetchJson(url, headers, body){
+  const res = await fetch(url, { method:"POST", headers, body: JSON.stringify(body) });
+  let payload = null;
+  try{ payload = await res.json(); }catch(e){}
+  if(!res.ok){
+    const detail = payload?.detail ? (typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail)) : (res.statusText || String(res.status));
+    const err = new Error(`خطأ ${res.status}: ${detail}`);
+    err.status = res.status;
+    throw err;
+  }
+  return payload;
+}
+
+async function sendMessage(text){
+  text = (text || "").trim();
+  if(!text) return;
+
+  const cfg = persistSettings();
+  if(!cfg.baseUrl) return;
+
+  document.getElementById("msgInput").value = "";
+  autoGrow();
+  hideEmptyState();
+
+  const wrap = document.getElementById("messages");
+  const turn = document.createElement("div");
+  turn.className = "turn";
+  wrap.appendChild(turn);
+  appendUserMessage(text, turn);
+  bumpTurn();
+  appendTyping(turn);
+  scrollToBottom();
+  setSending(true);
+
+  const base = cfg.baseUrl.replace(/\/$/, "");
+  const headers = { "Content-Type": "application/json", "X-Internal-Secret": cfg.secret };
+
+  const chatPromise = fetchJson(base + "/chat", headers, {
+    session_id: cfg.sessionId, user_id: cfg.userId || "test-user", message: text,
+  });
+  const contextPromise = fetchJson(base + "/context", headers, { message: text });
+
+  const [chatResult, ctxResult] = await Promise.allSettled([chatPromise, contextPromise]);
+
+  removeTyping();
+
+  let chatHtml, ctxHtml;
+  if(chatResult.status === "fulfilled"){
+    const data = chatResult.value;
+    chatHtml = renderChatPanel(data);
+    bumpTurn();
+    setLangPill(data?.state?.language);
+    updateDebugBoxes(data.state, data);
+    updateJsonPanel(data.state);
+  }else{
+    chatHtml = renderChatError(chatResult.reason?.message || "تعذّر الوصول لـ /chat");
+  }
+
+  if(ctxResult.status === "fulfilled"){
+    ctxHtml = renderContextPanel(ctxResult.value);
+  }else{
+    ctxHtml = renderContextError(ctxResult.reason?.message || "تعذّر الوصول لـ /context");
+  }
+
+  turn.insertAdjacentHTML("beforeend", chatHtml + ctxHtml);
+  scrollToBottom();
+  setSending(false);
+}
+
+function setSending(sending){
+  document.getElementById("sendBtn").disabled = sending;
+}
+function onSend(){
+  sendMessage(document.getElementById("msgInput").value);
+}
+
+function clearConversation(){
+  document.getElementById("messages").innerHTML = `
+    <div class="empty-state" id="emptyState">
+      <div class="big">🧭</div>
+      <h2>محادثة جديدة</h2>
+      <p>أُفرغت الرسائل من هذه الواجهة. ملاحظة: جلسة /chat على الخادم (Redis أو
+        الذاكرة) تبقى محفوظة بنفس Session ID ما لم تُنشئ جلسة جديدة — /context
+        بلا حالة أصلًا.</p>
+    </div>`;
+  turnCount = 0;
+  document.getElementById("turnPill").textContent = "0 رسائل";
+  updateDebugBoxes({}, {});
+  lastKnownState = null;
+  document.getElementById("jpStatus").innerHTML = "";
+  document.getElementById("jpBody").innerHTML = `
+    <div class="jp-empty-state">
+      <div class="big">📭</div>
+      ابدأ محادثة ليظهر هون الجيسون المتراكم من إجاباتك.
+    </div>`;
+  document.getElementById("jpRaw").textContent = "";
+}
+
+/* ============================= لوحة المفاتيح ============================= */
+function autoGrow(){
+  const el = document.getElementById("msgInput");
+  el.style.height = "auto";
+  el.style.height = Math.min(el.scrollHeight, 120) + "px";
+}
+
+document.addEventListener("DOMContentLoaded", ()=>{
+  loadSettings();
+  document.getElementById("sessionLabel").textContent = document.getElementById("sessionId").value;
+  document.getElementById("sessionId").addEventListener("change", ()=>{
+    document.getElementById("sessionLabel").textContent = document.getElementById("sessionId").value;
+  });
+  renderScenarios();
+  checkHealth();
+
+  const input = document.getElementById("msgInput");
+  input.addEventListener("input", autoGrow);
+  input.addEventListener("keydown", (e)=>{
+    if(e.key === "Enter" && !e.shiftKey){
+      e.preventDefault();
+      onSend();
+    }
+  });
+});
+</script>
+</body>
+</html>

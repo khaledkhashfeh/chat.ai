@@ -27,6 +27,7 @@ from app.shared.models import (
     ContextExclusions,
     ContextFilters,
     ContextLocation,
+    ContextTag,
     ConversationContextV1,
     TripContext,
 )
@@ -67,36 +68,26 @@ _GOVERNORATE_MAP: dict[str, tuple[str, Optional[str]]] = {
     "معلولا": ("Rif Dimashq", "Maaloula"),
 }
 
-# وسم "نوعي" → فئة (category) واحدة إلزامية. الوسوم اللينة (quiet/family_fun)
-# ليست فئات — تذهب للتفضيلات فقط.
-_TAG_TO_CATEGORY: dict[str, str] = {
-    "tag:historical": "Historical",
-    "tag:religious": "Religious",
-    "tag:nature": "Nature",
-    "tag:sea": "Sea",
-    "tag:market": "Market",
-    "tag:food": "Food",
-    "tag:museum": "Museum",
-    "tag:adventure": "Adventure",
+# وسم داخلي (tag:xxx) → (تسمية عربية، tag_type بمعجم قاعدة بيانات Laravel،
+# وزن افتراضي). يحل محل category+preferences القديمين معًا (قرار المالك).
+# tag_type الأربعة "timing"/"emotion" غير مُستخدَمين هنا عمدًا: التوقيت والموسم
+# مُمثَّلان أصلًا بحقول trip_context المنظّمة (preferred_time/season) فلا داعي
+# لتكرارهما كوسم عام، والانطباعات العاطفية (مريح/ساحر) خارج نطاق هذا الإصدار.
+_TAG_TO_TYPED: dict[str, tuple[str, str, float]] = {
+    "tag:historical": ("تاريخي", "heritage", 1.0),
+    "tag:museum": ("متحف", "heritage", 0.9),
+    "tag:religious": ("ديني", "heritage", 0.8),
+    "tag:nature": ("طبيعي", "nature", 1.0),
+    "tag:sea": ("بحر", "nature", 0.8),
+    "tag:market": ("سوق", "activity", 0.9),
+    "tag:food": ("طعام", "food", 1.0),
+    "tag:family_fun": ("عائلي", "audience", 0.9),
+    "tag:adventure": ("مغامرة", "activity", 1.0),
+    "tag:quiet": ("هادئ", "vibe", 0.9),
 }
-
-# وسم → (مفتاح تفضيل، وزن). قاموس تفضيلاتك: history/nature/family/romantic/
-# culture/food/shopping/photography/adventure/crowdedness.
-_TAG_TO_PREF: dict[str, tuple[str, float]] = {
-    "tag:historical": ("history", 1.0),
-    "tag:museum": ("culture", 0.9),
-    "tag:religious": ("culture", 0.8),
-    "tag:nature": ("nature", 1.0),
-    "tag:sea": ("nature", 0.8),
-    "tag:market": ("shopping", 0.9),
-    "tag:food": ("food", 1.0),
-    "tag:family_fun": ("family", 0.9),
-    "tag:adventure": ("adventure", 1.0),
-    "tag:quiet": ("crowdedness", -0.7),
-}
-_GROUP_TO_PREF: dict[str, tuple[str, float]] = {
-    "family": ("family", 0.8),
-    "couple": ("romantic", 0.8),
+_GROUP_TO_TYPED: dict[str, tuple[str, str, float]] = {
+    "family": ("عائلي", "audience", 0.8),
+    "couple": ("رومانسي", "vibe", 0.8),
 }
 
 # مستوى الميزانية (budget_tier) يُكشف مباشرةً من النص (مستقل عن budget_level
@@ -151,16 +142,10 @@ def _map_intent(raw_intent: str, text_norm: str) -> str:
     return intent
 
 
-def _build_filters(text_norm: str, destination: Optional[str], interests: list[str]) -> ContextFilters:
+def _build_filters(text_norm: str, destination: Optional[str]) -> ContextFilters:
     governorate = city = None
     if destination and destination in _GOVERNORATE_MAP:
         governorate, city = _GOVERNORATE_MAP[destination]
-
-    category = None
-    for tag in interests:
-        if tag in _TAG_TO_CATEGORY:
-            category = _TAG_TO_CATEGORY[tag]
-            break
 
     budget_tier = None
     for tier, kws in _BUDGET_TIER_KW.items():
@@ -168,32 +153,38 @@ def _build_filters(text_norm: str, destination: Optional[str], interests: list[s
             budget_tier = tier
             break
 
-    return ContextFilters(governorate=governorate, city=city, category=category, budget_tier=budget_tier)
+    return ContextFilters(governorate=governorate, city=city, budget_tier=budget_tier)
 
 
-def _build_preferences(text_norm: str, interests: list[str], group_type: Optional[str]) -> dict[str, float]:
-    prefs: dict[str, float] = {}
+def _build_tags(text_norm: str, interests: list[str], group_type: Optional[str]) -> list[ContextTag]:
+    """يحل محل category+preferences معًا بصيغة {tag, tag_type, weight} صريحة —
+    تطابق مباشرة عمود place_tags.tag_type بمشروع Laravel (قرار المالك)."""
+    merged: dict[tuple[str, str], float] = {}  # (tag, tag_type) -> weight
 
-    def put(key: str, weight: float) -> None:
-        # عند تعارض المصدرين لنفس المفتاح، نُبقي الأكبر مقدارًا (الإشارة الأقوى)
-        if key not in prefs or abs(weight) > abs(prefs[key]):
-            prefs[key] = weight
+    def put(tag: str, tag_type: str, weight: float) -> None:
+        key = (tag, tag_type)
+        # عند تعارض المصدرين لنفس الوسم، نُبقي الأكبر مقدارًا (الإشارة الأقوى)
+        if key not in merged or abs(weight) > abs(merged[key]):
+            merged[key] = weight
 
-    for tag in interests:
-        if tag in _TAG_TO_PREF:
-            key, weight = _TAG_TO_PREF[tag]
-            put(key, weight)
-    if group_type in _GROUP_TO_PREF:
-        key, weight = _GROUP_TO_PREF[group_type]
-        put(key, weight)
+    for interest_tag in interests:
+        if interest_tag in _TAG_TO_TYPED:
+            tag, tag_type, weight = _TAG_TO_TYPED[interest_tag]
+            put(tag, tag_type, weight)
+    if group_type in _GROUP_TO_TYPED:
+        tag, tag_type, weight = _GROUP_TO_TYPED[group_type]
+        put(tag, tag_type, weight)
     if _has(text_norm, _PHOTOGRAPHY_KW):
-        put("photography", 0.9)
+        put("تصوير", "activity", 0.9)
     if _has(text_norm, _ROMANTIC_KW):
-        put("romantic", 0.8)
+        put("رومانسي", "vibe", 0.8)
     if _has(text_norm, _CROWD_AVOID_KW):
-        put("crowdedness", -0.8)
+        put("هادئ", "vibe", 0.8)  # تجنّب الزحمة = نفس دافع وسم "هادئ" (لا مفتاح سالب منفصل)
 
-    return {key: round(weight, 2) for key, weight in prefs.items()}
+    return [
+        ContextTag(tag=tag, tag_type=tag_type, weight=round(weight, 2))
+        for (tag, tag_type), weight in merged.items()
+    ]
 
 
 def _build_trip_context(
@@ -246,9 +237,9 @@ def _build_exclusions(text_norm: str, negated_tags: set[str]) -> ContextExclusio
 
     categories: list[str] = []
     for tag in negated_tags:
-        cat = _TAG_TO_CATEGORY.get(tag)
-        if cat and cat not in categories:
-            categories.append(cat)
+        typed = _TAG_TO_TYPED.get(tag)
+        if typed and typed[0] not in categories:
+            categories.append(typed[0])  # التسمية العربية بدل اسم الفئة الإنكليزي القديم
 
     return ContextExclusions(categories=sorted(categories), place_ids=[], requirements=requirements)
 
@@ -296,8 +287,7 @@ def _build_query_text(text_norm: str, filters: ContextFilters, destination: Opti
 def _missing_information(
     intent: str,
     filters: ContextFilters,
-    interests: list[str],
-    preferences: dict[str, float],
+    tags: list[ContextTag],
     has_duration: bool,
     group_type: Optional[str],
 ) -> list[str]:
@@ -306,7 +296,7 @@ def _missing_information(
     if intent in ("recommend_places", "search_places"):
         if not filters.governorate and not filters.city:
             missing.append("governorate_or_city")
-        if not interests and not preferences:
+        if not tags:
             missing.append("trip_interests")
     elif intent == "create_plan":
         if not filters.governorate and not filters.city:
@@ -343,8 +333,8 @@ def extract_context(message: str, language: Optional[str] = None) -> Conversatio
     negated = _negated_tags(text)
     interests: list[str] = [t for t in ents.get("interests", []) if t not in negated]
 
-    filters = _build_filters(text, destination, interests)
-    preferences = _build_preferences(text, interests, group_type)
+    filters = _build_filters(text, destination)
+    tags = _build_tags(text, interests, group_type)
     trip_context = _build_trip_context(text, group_type, interests)
     exclusions = _build_exclusions(text, negated)
     query_text = _build_query_text(text, filters, destination)
@@ -352,7 +342,7 @@ def extract_context(message: str, language: Optional[str] = None) -> Conversatio
     # requires_clarification تحكمه **كفاية المعلومات** (missing_information) لا ثقة
     # المصنّف: إن استخرجنا محافظة + اهتمامات فبإمكان Laravel التصرّف مهما كانت ثقة
     # النية. حقل confidence يُبلَّغ مستقلًّا كي يقرر Laravel عتبته الخاصة.
-    missing = _missing_information(intent, filters, interests, preferences, has_duration, group_type)
+    missing = _missing_information(intent, filters, tags, has_duration, group_type)
     requires_clarification = bool(missing)
     clarification_question = (
         responses.context_clarification(missing, lang) if requires_clarification else None
@@ -363,7 +353,7 @@ def extract_context(message: str, language: Optional[str] = None) -> Conversatio
         language=lang,  # type: ignore[arg-type]
         query_text=query_text,
         filters=filters,
-        preferences=preferences,
+        tags=tags,
         trip_context=trip_context,
         location=ContextLocation(),  # يأتي من الجهاز/Laravel، ليس من النص
         exclusions=exclusions,

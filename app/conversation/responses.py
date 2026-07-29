@@ -16,7 +16,6 @@ from app.shared.models import (
     ChatResponse,
     CompareResponse,
     ConversationState,
-    FeasibilityResponse,
     PlaceCard,
     PlaceDetails,
     PlanChange,
@@ -24,24 +23,11 @@ from app.shared.models import (
     ProfileResponse,
 )
 
-# سؤال واحد لكل حقل ناقص عند بناء خطة (أولوية: destination ثم duration_days ثم group_type)
-QUESTIONS: dict[str, dict[str, str]] = {
-    "ar": {
-        "destination": "بدي ساعدك أكتر — لوين ناوي تروح؟",
-        "duration_days": "حلو! كم يوم عندك للرحلة؟",
-        "group_type": "طيب، رايح لحالك، مع العيلة، ولا مع أصحاب؟",
-    },
-    "en": {
-        "destination": "Happy to help — where would you like to go?",
-        "duration_days": "Nice! How many days do you have for the trip?",
-        "group_type": "Got it — solo, with family, or with friends?",
-    },
-}
-
 # أسئلة الجمع الموحّدة (نمط «اجمع أولًا ثم استدعِ») — سؤال واحد لكل حقل ناقص،
 # بترتيب الأولوية المحدَّد في dialogue.py. مفاتيحها تغطي كل الحقول القابلة للجمع.
 GATHER_QUESTIONS: dict[str, dict[str, str]] = {
     "ar": {
+        "trip_purpose": "شو أكتر شي بتدور عليه بالرحلة؟ استجمام وراحة، مغامرة ونشاط، أجواء ثقافية وتاريخية، متعة عائلية، ولا أجواء رومانسية؟",
         "destination": "يلا نبدأ! لوين ناوي تروح؟ (أي مدينة بسوريا)",
         "interests": "شو نوع الأماكن يلي بتشدّك أكتر؟ تاريخية، طبيعية، بحر، أكل، أسواق، متاحف…",
         "budget_level": "قديش ميزانيتك تقريبًا؟ اقتصادية، متوسطة، ولا مرتاح أكتر؟",
@@ -49,6 +35,7 @@ GATHER_QUESTIONS: dict[str, dict[str, str]] = {
         "duration_days": "كم يوم معك للرحلة؟",
     },
     "en": {
+        "trip_purpose": "What are you mainly after on this trip? Relaxation, adventure, culture and history, family fun, or something romantic?",
         "destination": "Let's get started — where would you like to go? (any city in Syria)",
         "interests": "What kind of places pull you in? Historical, nature, sea, food, markets, museums…",
         "budget_level": "What's your budget roughly? Budget, mid-range, or comfortable?",
@@ -58,18 +45,6 @@ GATHER_QUESTIONS: dict[str, dict[str, str]] = {
 }
 
 T: dict[str, dict[str, list[str]]] = {
-    "show_places": {
-        "ar": ["يا هلا! لقيتلك {n} أماكن بتناسب ذوقك 👇 شو شدّ نظرك أكتر؟", "خبطتها معك — هي أفضل {n} خيارات ليك 👇 بتحب تعرف أكتر عن حدا منهن؟"],
-        "en": ["Found {n} spots I think you'll love 👇 What catches your eye?", "Here are the top {n} picks for you 👇 Want details on any of them?"],
-    },
-    "show_places_partial": {
-        "ar": ["يلا نبدأ بهيدول {n} اقتراحات مبدئية 👇 وبعدين بنضبطها أكتر مع بعض", "قبل ما نحدد كل شي، جبتلك {n} أفكار أولية 👇 خبرني شو عاجبك ونطورها"],
-        "en": ["Let's start with these {n} initial picks 👇 we'll fine-tune together after", "Before locking in every detail, here are {n} early ideas 👇 tell me what clicks"],
-    },
-    "no_results": {
-        "ar": ["{reason}. بدك نوسّع البحث شوي ونلاقي شي أحلى؟", "دقّقت وما لقيت شي مطابق تمامًا — {reason}. نجرب زاوية تانية؟"],
-        "en": ["{reason}. Want me to widen the search and find something better?", "I looked closely and nothing matched exactly — {reason}. Want to try another angle?"],
-    },
     "place_details": {
         "ar": ["هاد كل يلي عندي عن {name} 👆 عجبك؟ بتحب تضيفو للخطة؟", "تفاصيل {name} فوق 👆 شكلها حلوة صح؟ في شي تاني بدك تعرفو؟"],
         "en": ["Here's everything I've got on {name} 👆 Liking it? Want to add it to your plan?", "Details for {name} above 👆 Anything else you'd like to know?"],
@@ -90,17 +65,37 @@ T: dict[str, dict[str, list[str]]] = {
         "ar": ["{question}", "بس بدي اعرف كمان شي صغير: {question}"],
         "en": ["{question}", "Just one more thing: {question}"],
     },
-    "plan_ready": {
-        "ar": ["جهزتلك خطتك زي ما بتحبها بالظبط: {summary} ✨ شو رأيك فيها؟", "هيدي خطتك جاهزة: {summary} 👆 في شي بدك تعدلو؟"],
-        "en": ["Put together a plan I think you'll love: {summary} ✨ What do you think?", "Your plan is ready: {summary} 👆 anything you'd like to adjust?"],
+    "ask_again": {
+        "ar": ["ما فهمت جوابك منيح، ممكن توضحلي: {question}", "عذرًا، ما وضح لي — {question}"],
+        "en": ["I didn't quite catch that — could you clarify: {question}", "Sorry, that wasn't clear to me — {question}"],
     },
-    "plan_ready_defaults": {
-        "ar": ["يلا نبدأ بخطة عامة هلأ، وفينا نضبطها أكتر بعدين: {summary} 👆", "بما إنه ما توضحت التفاصيل كلها، جهزتلك خطة أولية: {summary} 👆 وفينا نعدلها متل ما بدك"],
-        "en": ["Let's start with a general plan for now, we can fine-tune later: {summary} 👆", "Since not every detail was clear, here's an initial plan: {summary} 👆 we can adjust it anytime"],
+    # نهاية مسار الجمع (قرار المالك): طبقة المحادثة تتوقف هنا — لا تستدعي
+    # recommender/planner ولا تعرض أماكن أو خططًا؛ فقط تؤكد اكتمال الجمع.
+    # الجيسون الجاهز للإرسال يُعرض بقسم منفصل بواجهة الاختبار، لا هنا.
+    "gathered_ready": {
+        "ar": ["تمام، جمعت كل معلومات {target} ✅ جاهزة نبعتها لطبقة التوصية.", "خلص، صار عندي كل يلي بلزم لـ{target} ✅"],
+        "en": ["Got it — I've gathered everything needed for {target} ✅ ready to send to the recommendation layer.", "All set for {target} ✅ I have everything I need."],
     },
-    "infeasible": {
-        "ar": ["بدي أكون صريح معك: {reason}. {suggestion}", "بصراحة، {reason}. بس {suggestion}"],
-        "en": ["Being straight with you: {reason}. {suggestion}", "Honestly, {reason}. But {suggestion}"],
+    "gathered_partial": {
+        "ar": ["تمام، جمعت يلي قدرت عليه من معلومات {target} ✅ منضبط الباقي بعدين.", "خلص هلق بيلي توفر لـ{target} ✅ ونكمل التفاصيل لاحقًا."],
+        "en": ["Got what I could for {target} for now ✅ we'll refine the rest later.", "That's enough to work with for {target} ✅ we can fine-tune later."],
+    },
+    # تعديل/إزالة معلومة مجموعة (لا خطة) — إضافة تعمل ضمنيًا بذكر المعلومة عاديًا
+    "removed_value": {
+        "ar": ["تمام، شلت {value} ✅ في شي تاني بدك تعدلو؟", "خلص، ألغيت {value} ✅ شو رأيك نكمل؟"],
+        "en": ["Done — removed {value} ✅ anything else to adjust?", "Got it, {value} is gone ✅ shall we continue?"],
+    },
+    "confirm_reset": {
+        "ar": ["متأكد بدك تبلش خطة جديدة؟ رح ننسى كل المعلومات يلي جمعناها لهلق 🗑️ (قلي أكيد/لا)", "بس تأكيد: هيك رح نمسح كل شي وبنبلش من الصفر — متأكد؟ (أكيد/لا)"],
+        "en": ["Are you sure you want to start a new plan? We'll forget everything gathered so far 🗑️ (confirm/no)", "Just to confirm: this will erase everything and start fresh — sure? (yes/no)"],
+    },
+    "reset_confirmed": {
+        "ar": ["تمام ✅ نسينا كل شي وبلشنا من جديد — {question}", "خلص، صفحة بيضاء ✅ {question}"],
+        "en": ["Done ✅ clean slate, starting fresh — {question}", "All forgotten ✅ {question}"],
+    },
+    "reset_declined": {
+        "ar": ["تمام، ما لمسنا شي — نكمل متل ما إحنا 🙂", "ولا يهمك، خلينا نكمل عادي."],
+        "en": ["No problem, nothing changed — let's continue as we are 🙂", "Sure, we'll keep going as-is."],
     },
     "no_plan_yet": {
         "ar": ["ما في خطة لسا — يلا نبنيلك وحدة؟", "لسا ما عنا خطة جاهزة، شو رأيك نعملها سوا هلق؟"],
@@ -181,10 +176,6 @@ def respond(
     return ChatResponse(reply=text.strip(), cards=cards, plan=plan, comparison=comparison, state=state)
 
 
-def question_for_missing_field(field: str, language: str) -> str:
-    return QUESTIONS[language][field]
-
-
 def gather_question_for(field: str, language: str) -> str:
     """سؤال جمع حقل واحد (نمط اجمع-أولًا) — يغطي كل الحقول القابلة للجمع."""
     return GATHER_QUESTIONS[language][field]
@@ -226,6 +217,28 @@ def place_display_name(name_ar: str, name_en: str, language: str) -> str:
     return name_ar if language == "ar" else name_en
 
 
+# تسمية عرض نظيفة لكل وسم اهتمام (tag:xxx) بلغتين — لرسائل مثل "شلت الأماكن التاريخية ✅"
+_TAG_DISPLAY: dict[str, dict[str, str]] = {
+    "tag:historical": {"ar": "الأماكن التاريخية", "en": "historical places"},
+    "tag:religious": {"ar": "الأماكن الدينية", "en": "religious places"},
+    "tag:nature": {"ar": "الأماكن الطبيعية", "en": "nature spots"},
+    "tag:sea": {"ar": "أماكن البحر", "en": "sea spots"},
+    "tag:market": {"ar": "الأسواق", "en": "markets"},
+    "tag:food": {"ar": "أماكن الأكل", "en": "food spots"},
+    "tag:family_fun": {"ar": "أماكن العائلة", "en": "family places"},
+    "tag:adventure": {"ar": "أماكن المغامرة", "en": "adventure spots"},
+    "tag:quiet": {"ar": "الأماكن الهادئة", "en": "quiet places"},
+    "tag:museum": {"ar": "المتاحف", "en": "museums"},
+}
+
+
+def tag_display_label(tag: str, language: str) -> str:
+    entry = _TAG_DISPLAY.get(tag)
+    if not entry:
+        return tag.replace("tag:", "")
+    return entry.get(language, entry["ar"])
+
+
 def details_reply(place: PlaceDetails, language: str, state: ConversationState, plan_link_note: str = "") -> ChatResponse:
     name = place_display_name(place.place.name_ar, place.place.name_en, language)
     response = respond("place_details", language, state=state, cards=[place.place], name=name)
@@ -248,8 +261,3 @@ def build_greeting(profile: ProfileResponse, language: str, state: ConversationS
 def plan_updated_reply(changes: list[PlanChange], plan: PlanObject, language: str, state: ConversationState) -> ChatResponse:
     note = "، ".join(c.change_ar for c in changes) if changes else ""
     return respond("plan_updated", language, state=state, plan=plan, change_note=note)
-
-
-def infeasible_reply(feas: FeasibilityResponse, language: str, state: ConversationState) -> ChatResponse:
-    suggestion = feas.suggestion.label_ar if feas.suggestion else ""
-    return respond("infeasible", language, state=state, reason=feas.reason_ar, suggestion=suggestion)

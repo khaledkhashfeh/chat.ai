@@ -37,13 +37,14 @@ def test_context_returns_full_contract_shape():
     assert data["language"] == "ar"
     # كل مفاتيح العقد موجودة
     for key in (
-        "query_text", "filters", "preferences", "trip_context",
+        "query_text", "filters", "tags", "trip_context",
         "location", "exclusions", "confidence",
         "requires_clarification", "missing_information", "clarification_question",
     ):
         assert key in data, key
     assert data["filters"]["governorate"] == "Damascus"
-    assert data["filters"]["category"] == "Historical"
+    assert "category" not in data["filters"]  # أُزيلت — الوسوم تحمل المعلومة الآن
+    assert {"tag": "تاريخي", "tag_type": "heritage", "weight": 1.0} in data["tags"]
     assert 0.0 <= data["confidence"] <= 1.0
 
 
